@@ -1,0 +1,35 @@
+:root {
+  --ink: #17222b;
+  --muted: #68747e;
+  --line: #d9e0e2;
+  --paper: #f4f6f4;
+  --card: #ffffff;
+  --green: #22624e;
+  --amber: #9a6a22;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--paper); }
+body { margin: 0; color: var(--ink); font-family: Arial, Helvetica, sans-serif; }
+.shell { max-width: 1180px; min-height: 100vh; margin: 0 auto; padding: 28px 34px; display: flex; flex-direction: column; }
+.topbar { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; border-bottom: 1px solid var(--line); padding-bottom: 24px; }
+.eyebrow { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .16em; margin: 0 0 10px; }
+h1 { font-size: 20px; letter-spacing: -.02em; margin: 0; }
+.phase { color: var(--green); font-size: 12px; font-weight: 700; padding-top: 3px; }
+.hero { max-width: 740px; padding: 108px 0 62px; }
+h2 { font-size: clamp(38px, 6vw, 68px); font-weight: 500; letter-spacing: -.055em; line-height: .98; margin: 0 0 28px; }
+.lede { color: var(--muted); font-size: 17px; line-height: 1.6; margin: 0; max-width: 650px; }
+.status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.status-card { background: var(--card); border: 1px solid var(--line); min-height: 118px; padding: 20px; display: flex; gap: 14px; align-items: flex-start; }
+.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); margin-top: 4px; box-shadow: 0 0 0 4px #e1eee9; }
+.status-dot.muted { background: var(--amber); box-shadow: 0 0 0 4px #f5ecdc; }
+.card-label { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+.card-status { font-size: 17px; font-weight: 700; margin: 0; }
+.footer { border-top: 1px solid var(--line); color: var(--muted); display: flex; justify-content: space-between; gap: 16px; margin-top: auto; padding-top: 24px; font-size: 12px; }
+@media (max-width: 720px) {
+  .shell { padding: 22px 20px; }
+  .topbar, .footer { flex-direction: column; }
+  .hero { padding: 72px 0 46px; }
+  .status-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 440px) { .status-grid { grid-template-columns: 1fr; } h2 { font-size: 42px; } }

@@ -1,0 +1,27 @@
+{
+  "name": "beyond-fire-radar-web",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --ext .ts,.tsx"
+  },
+  "dependencies": {
+    "next": "15.5.22",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "@types/react": "19.1.2",
+    "@types/react-dom": "19.1.2",
+    "eslint": "8.57.1",
+    "eslint-config-next": "15.5.22",
+    "typescript": "5.8.3"
+  },
+  "overrides": {
+    "postcss": "8.5.25",
+    "sharp": "0.35.3"
+  }
+}

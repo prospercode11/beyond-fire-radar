@@ -1,0 +1,22 @@
+{
+  "fixture_type": "synthetic_dispatch_snapshot",
+  "fixture_version": "1.0.0",
+  "geography": "Sarasota County, Florida",
+  "records": [
+    {
+      "source_record_id": "fixture-001",
+      "source_event_id": "SYN-1001",
+      "event_time": "2026-01-15T14:22:00Z",
+      "event_type": "STRUCTURE FIRE",
+      "location": "100 Example Avenue, Sarasota, FL 34236"
+    },
+    {
+      "source_record_id": "fixture-002",
+      "source_event_id": "SYN-1001",
+      "event_time": "2026-01-15T14:25:00Z",
+      "event_type": "FIRE UPDATE",
+      "location": "100 Example Ave, Sarasota, FL 34236"
+    }
+  ],
+  "notice": "Synthetic fixture for parser and replay tests only; it is not evidence of real-world accuracy."
+}
