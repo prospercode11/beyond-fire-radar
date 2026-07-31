@@ -25,7 +25,7 @@ flowchart LR
 4. Owner and organization data is restricted and is never automatically contacted.
 5. Model outputs are governed artifacts, not facts.
 
-## Phase 2 request flow
+## Phase 2 and Phase 3 request flow
 
 ```mermaid
 sequenceDiagram
@@ -46,6 +46,10 @@ sequenceDiagram
   W->>A: POST /providers/{id}/snapshots + Idempotency-Key
   A->>DB: Persist retrieval, job, raw reference, parse result, health, audit
   A-->>W: Status, counts, parser/schema version, replay state
+  U->>W: Start incident processing for a manual retrieval
+  W->>A: POST /incidents/process/retrievals/{retrieval_id}
+  A->>DB: Verify acquisition mode, assemble/link observations, persist decisions/evidence/timeline
+  A-->>W: Processing counts, linkage/classification versions, review/contradiction counts
 ```
 
-Manual snapshot ingestion is the Phase 2 boundary. The live Sarasota provider remains disabled behind the feature flag, and no Boca radio or Broadcastify source is in scope. Canonical incident and property pipelines are later phases.
+Manual snapshot ingestion and Sarasota-only incident processing are the Phase 2/3 boundary. Retrievals carry `manual_snapshot` or `synthetic_fixture` provenance; live-collected input is rejected while `ENABLE_LIVE_SARASOTA_DISPATCH_POLLING=false`. The external approval gate is not removed or bypassed. No Boca radio, Broadcastify, property, scoring, dashboard, or outreach source is in scope.

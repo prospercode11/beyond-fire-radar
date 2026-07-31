@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -134,6 +135,8 @@ class ProviderRetrieval(Base):
     circuit_state: Mapped[str] = mapped_column(String(40), nullable=False, default="closed")
     error_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    acquisition_mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    authorization_basis: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
 
 
 class RawSnapshot(Base):
@@ -324,3 +327,301 @@ class ImportErrorRecord(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class CanonicalIncident(Base):
+    __tablename__ = "canonical_incidents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    provider_id: Mapped[str] = mapped_column(ForeignKey("providers.id"), index=True, nullable=False)
+    state: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    classification_family: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    classification_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    classification_confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    confidence_band: Mapped[str] = mapped_column(String(32), nullable=False)
+    review_band: Mapped[str] = mapped_column(String(32), nullable=False)
+    canonical_event_type: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    first_event_time: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_event_time: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    canonical_location: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    canonical_grid: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    canonical_agency: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    canonical_station: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    contradiction_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    classification_explanation: Mapped[dict[str, Any]] = mapped_column(
+        JsonType, nullable=False, default=dict
+    )
+    current_explanation: Mapped[dict[str, Any]] = mapped_column(
+        JsonType, nullable=False, default=dict
+    )
+    review_signal_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="not_issued", server_default="not_issued"
+    )
+    review_signal_issued_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    review_signal_revoked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    review_signal_revocation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    merged_into_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("canonical_incidents.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class IncidentObservationLink(Base):
+    __tablename__ = "incident_observation_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "incident_id",
+            "observation_id",
+            "is_current",
+            name="uq_incident_observation_link_version",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    observation_id: Mapped[str] = mapped_column(
+        ForeignKey("dispatch_observations.id"), index=True, nullable=False
+    )
+    raw_dispatch_row_id: Mapped[str] = mapped_column(
+        ForeignKey("raw_dispatch_rows.id"), index=True, nullable=False
+    )
+    link_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    assignment_key: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, unique=True)
+    decision_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    created_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class IncidentAlias(Base):
+    __tablename__ = "incident_aliases"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    provider_id: Mapped[str] = mapped_column(ForeignKey("providers.id"), index=True, nullable=False)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    observation_id: Mapped[str] = mapped_column(
+        ForeignKey("dispatch_observations.id"), index=True, nullable=False
+    )
+    alias_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    alias_value: Mapped[str] = mapped_column(String(200), nullable=False)
+    collision: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+Index(
+    "uq_incident_alias_provider_source_record",
+    IncidentAlias.provider_id,
+    IncidentAlias.alias_type,
+    IncidentAlias.alias_value,
+    unique=True,
+    sqlite_where=IncidentAlias.alias_type == "source_record_id",
+    postgresql_where=IncidentAlias.alias_type == "source_record_id",
+)
+
+
+class IncidentMatchDecision(Base):
+    __tablename__ = "incident_match_decisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    observation_id: Mapped[str] = mapped_column(
+        ForeignKey("dispatch_observations.id"), index=True, nullable=False
+    )
+    candidate_incident_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=True
+    )
+    reference_observation_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("dispatch_observations.id"), nullable=True
+    )
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    stage: Mapped[str] = mapped_column(String(32), nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    confidence_band: Mapped[str] = mapped_column(String(32), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    features: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    explanation: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    created_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class IncidentEvidence(Base):
+    __tablename__ = "incident_evidence"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    observation_id: Mapped[str] = mapped_column(
+        ForeignKey("dispatch_observations.id"), index=True, nullable=False
+    )
+    evidence_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    details: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class IncidentTimelineEvent(Base):
+    __tablename__ = "incident_timeline_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    prior_state: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    new_state: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    source_observation_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("dispatch_observations.id"), nullable=True
+    )
+    details: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    actor_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class IncidentMerge(Base):
+    __tablename__ = "incident_merges"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    survivor_incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    absorbed_incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    explanation: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    actor_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class IncidentSplit(Base):
+    __tablename__ = "incident_splits"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    original_incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    new_incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    moved_observation_ids: Mapped[list[str]] = mapped_column(JsonType, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    explanation: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    actor_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class IncidentProcessingRun(Base):
+    __tablename__ = "incident_processing_runs"
+    __table_args__ = (UniqueConstraint("retrieval_id", name="uq_incident_processing_retrieval"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    provider_id: Mapped[str] = mapped_column(ForeignKey("providers.id"), index=True, nullable=False)
+    retrieval_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("provider_retrievals.id"), index=True, nullable=True
+    )
+    acquisition_mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    linkage_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    classification_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    observation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    linked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    new_incident_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    contradiction_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    actor_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class IncidentRespondingAgency(Base):
+    __tablename__ = "responding_agencies"
+    __table_args__ = (
+        UniqueConstraint(
+            "incident_id", "agency", "observation_id", name="uq_incident_agency_observation"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    observation_id: Mapped[str] = mapped_column(
+        ForeignKey("dispatch_observations.id"), index=True, nullable=False
+    )
+    agency: Mapped[str] = mapped_column(String(120), nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class IncidentRespondingStation(Base):
+    __tablename__ = "responding_stations"
+    __table_args__ = (
+        UniqueConstraint(
+            "incident_id", "station", "observation_id", name="uq_incident_station_observation"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    observation_id: Mapped[str] = mapped_column(
+        ForeignKey("dispatch_observations.id"), index=True, nullable=False
+    )
+    station: Mapped[str] = mapped_column(String(200), nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class IncidentDisposition(Base):
+    __tablename__ = "incident_dispositions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    observation_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("dispatch_observations.id"), index=True, nullable=True
+    )
+    disposition: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    recorded_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)

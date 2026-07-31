@@ -48,6 +48,22 @@
 - [ ] PostgreSQL/PostGIS and Redis integration execution: Docker/Colima unavailable in this environment.
 - [x] Phase 2 handoff and acceptance evidence recorded.
 
+## Phase 3 — Incident intelligence
+
+- [x] Phase 3 migration and canonical incident tables preserve source-row relationships and provenance.
+- [x] Deterministic deduplication for source record/event/case/address-time evidence.
+- [x] Explainable probabilistic linkage baseline with match, human-review, and no-match bands.
+- [x] Cluster consistency limits prevent transitive over-merging; reused identifiers remain separate.
+- [x] Versioned taxonomy aggregation, contradiction evidence, confidence, and abstention behavior.
+- [x] Incident timelines, governed state machine, incremental processing, and rescore hook.
+- [x] Audited manual merge and split controls preserve all raw/source rows.
+- [x] Match/separation explanations and acquisition-mode provenance are exposed through the API.
+- [x] Adversarial tests cover duplicates, missing IDs, conflicting types, reused identifiers, same-address separate fires, malformed rows, replay, and merge/split.
+- [x] Independent Luna review completed; critical/high findings addressed.
+- [x] Phase 3 formatting, lint, type, unit, migration, API smoke, and relevant end-to-end checks recorded.
+- [x] Phase 3 handoff and execution documents recorded.
+- [ ] PostgreSQL/PostGIS and Redis integration execution: Docker/Colima unavailable in this environment.
+
 ## Phase gate rule
 
-Phase 3 must not start until the Phase 2 handoff is accepted, an approved Sarasota snapshot has passed the external-source gate, and the Phase 2 persistence/integration evidence is reviewed. Phase 3 is not started in this commit.
+Phase 4 must not start until the Phase 3 handoff is accepted and the external-source/integration evidence is separately reviewed. Live Sarasota polling, property resolution, scoring, dashboard, outreach, Boca, Broadcastify, and later phases remain out of scope for this commit.

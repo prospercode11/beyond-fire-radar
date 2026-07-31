@@ -63,6 +63,8 @@ class IngestionReport:
     schema_alert_count: int
     replayed: bool
     error: Optional[str]
+    acquisition_mode: str
+    authorization_basis: Optional[str]
 
 
 def report_from_job(db: Session, job: ImportJob, replayed: bool) -> IngestionReport:
@@ -82,6 +84,8 @@ def report_from_job(db: Session, job: ImportJob, replayed: bool) -> IngestionRep
             schema_alert_count=0,
             replayed=replayed,
             error="legacy import job has no retrieval reference",
+            acquisition_mode="unknown",
+            authorization_basis=None,
         )
     alert_count = db.scalar(
         select(func.count())
@@ -107,6 +111,8 @@ def report_from_job(db: Session, job: ImportJob, replayed: bool) -> IngestionRep
         schema_alert_count=alert_count or 0,
         replayed=replayed,
         error=retrieval.error_message,
+        acquisition_mode=retrieval.acquisition_mode,
+        authorization_basis=retrieval.authorization_basis,
     )
 
 
@@ -256,6 +262,14 @@ class DispatchIngestionService:
             schema_version=SCHEMA_VERSION,
             parser_version=PARSER_VERSION,
             circuit_state="closed",
+            acquisition_mode=(
+                "synthetic_fixture"
+                if provider.id == "fixture.sarasota.dispatch"
+                else "manual_snapshot"
+            ),
+            authorization_basis=(
+                "fixture" if provider.id == "fixture.sarasota.dispatch" else "manual_attestation"
+            ),
         )
         db.add(retrieval)
         db.flush()

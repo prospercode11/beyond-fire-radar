@@ -21,6 +21,17 @@
 - Live Sarasota polling remains disabled; no Boca radio or Broadcastify source is used.
 - A real approved Sarasota snapshot must be attached separately to close the external-source gate; repository fixtures are not evidence.
 
+## Phase 3 gate
+
+- Fresh migration upgrade/downgrade/re-upgrade includes canonical incident tables and acquisition-mode provenance.
+- Current Sarasota manual/fixture retrievals process through deterministic and probabilistic linkage without requiring live polling.
+- Reprocessing a retrieval is idempotent and does not create duplicate canonical incidents.
+- Duplicate agency rows, missing IDs, conflicting event types, reused identifiers, separate same-address fires, malformed rows, and human merge/split controls are covered.
+- Match, possible-match, and non-match decisions retain features, thresholds, explanations, and linkage version.
+- Contradictions remain visible in evidence and timelines; source observations and raw row IDs remain inspectable.
+- Manual state transitions reject unsupported states/transitions and are audited.
+- No Phase 4 property, scoring, dashboard, outreach, Boca, Broadcastify, or broader machine-learning work is included.
+
 ## Test layers
 
 1. Unit: password/session hashing, provider contract behavior, fixture shape.

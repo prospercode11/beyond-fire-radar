@@ -4,7 +4,7 @@ Beyond Fire Radar is an internal, research-only property-loss intelligence syste
 
 ## Current scope
 
-Phase 0, Phase 1, and the Phase 2 dispatch-ingestion implementation are complete in this repository:
+Phase 0 through Phase 3 — Sarasota incident intelligence — are complete in this repository:
 
 - Architecture, product, modeling, compliance, data, testing, execution, and handoff documents.
 - FastAPI modular-monolith API with SQLAlchemy and Alembic migrations.
@@ -14,9 +14,10 @@ Phase 0, Phase 1, and the Phase 2 dispatch-ingestion implementation are complete
 - Provider registry and provider health metadata, with Sarasota live polling disabled by default.
 - Synthetic fixture metadata for repeatable foundation tests. Fixtures are never accuracy evidence.
 - Authorized manual CSV/HTML/JSON snapshot ingestion for the Sarasota dispatch source, with immutable raw preservation, versioned parsing, taxonomy, schema alerts, replay protection, and retrieval health.
+- Canonical Sarasota incidents with conservative deterministic/probabilistic linkage, source-row provenance, contradiction evidence, versioned classification, timelines, state transitions, rescore hooks, and audited merge/split controls.
 - Small Next.js TypeScript shell that reports foundation status.
 
-Canonical incident assembly, property imports, geospatial matching, learned scoring, notifications, and outreach remain later phases and are not implemented here.
+Property imports, address-to-parcel matching, learned scoring, dashboard work, notifications, Boca/Broadcastify, and outreach remain later phases and are not implemented here.
 
 ## Local setup
 
@@ -43,9 +44,11 @@ Open [http://localhost:3000](http://localhost:3000). The API is available at [ht
 
 The first user can be created once with the configured `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` through `POST /api/v1/auth/bootstrap`. The bootstrap endpoint is closed after the first user exists.
 
-## Phase 2 dispatch import
+## Sarasota manual import and Phase 3 incident processing
 
 Live Sarasota polling is intentionally disabled. An authorized internal user can import a manually obtained snapshot with `POST /api/v1/providers/sarasota.official_dispatch/snapshots`, using multipart field `file`, form field `authorized_snapshot=true`, and a unique `Idempotency-Key` header. The repository fixtures under `apps/api/fixtures/` are deterministic test inputs only; they are not external-source evidence.
+
+After import, process a manual or fixture retrieval with `POST /api/v1/incidents/process/retrievals/{retrieval_id}`. Retrieval and incident responses expose `manual_snapshot` or `synthetic_fixture` acquisition mode. The external-source approval gate remains in force; live-collected input is not enabled or processed.
 
 ## Verification
 

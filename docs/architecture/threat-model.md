@@ -19,7 +19,10 @@
 | Data tampering | Migrations, content-addressed immutable snapshot store, raw row preservation, audit records | Database/operator access and retention controls require production hardening |
 | False model claims | No probabilities or accuracy claims; source wording and unknown taxonomy are preserved | Future models require real held-out labels and calibration gates |
 | Unauthorized outreach | No outreach routes, jobs, or sender integration | Future work must remain feature-flagged and legally approved |
-| Replay/idempotency failure | Provider-scoped idempotency keys, content hashes, and unique raw/normalized row constraints | Concurrent multi-writer behavior and production database testing require the external integration environment |
+| Replay/idempotency failure | Provider-scoped idempotency keys, content hashes, unique raw/normalized row constraints, and unique retrieval processing runs | Concurrent multi-writer behavior and production database testing require the external integration environment |
+| Transitive incident over-merge | Conservative deterministic guards, explainable multi-feature baseline, cluster time/location/identifier limits, human-review band, and adversarial tests | Real-world address quality and provider identifier reuse still require reviewer oversight |
+| Contradictory source evidence hidden | Raw rows and observations remain immutable; contradictory evidence, collision aliases, timelines, and original linkage decisions are retained | Resolution/disposition workflows are future human-review work |
+| Unauthorized live-source processing | Acquisition mode is persisted; incident processing accepts manual/fixture modes and rejects live-collected mode while the feature flag is disabled | Written source approval and production integration evidence remain separately tracked |
 
 ## Required production follow-up
 

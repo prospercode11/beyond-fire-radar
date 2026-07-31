@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api.routes import admin, auth, providers
+from app.api.routes import admin, auth, incidents, providers
 from app.api.routes.providers import seed_providers
 from app.config import get_settings
 from app.db import SessionLocal
@@ -37,7 +37,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.web_origin],
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
 )
 
@@ -59,7 +59,7 @@ def healthz() -> dict[str, object]:
         "status": "ok",
         "service": settings.app_name,
         "live_polling_enabled": settings.enable_live_sarasota_dispatch_polling,
-        "phase": "2-dispatch-ingestion",
+        "phase": "3-incident-intelligence",
     }
 
 
@@ -76,4 +76,5 @@ def readyz() -> JSONResponse:
 app.include_router(auth.router)
 app.include_router(providers.router)
 app.include_router(providers.retrieval_router)
+app.include_router(incidents.router)
 app.include_router(admin.router)

@@ -85,6 +85,8 @@ class ImportJobResponse(BaseModel):
     schema_alert_count: int
     replayed: bool
     error: Optional[str]
+    acquisition_mode: str
+    authorization_basis: Optional[str]
 
 
 class SchemaAlertResponse(BaseModel):
@@ -148,3 +150,73 @@ class AuditResponse(BaseModel):
     request_id: str
     metadata: Dict[str, Any]
     created_at: datetime
+
+
+class IncidentProcessResponse(BaseModel):
+    processing_run_id: str
+    retrieval_id: Optional[str]
+    provider_id: str
+    acquisition_mode: str
+    status: str
+    linkage_version: str
+    classification_version: str
+    observation_count: int
+    linked_count: int
+    new_incident_count: int
+    review_count: int
+    contradiction_count: int
+
+
+class IncidentStateUpdate(BaseModel):
+    state: str
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class IncidentMergeRequest(BaseModel):
+    absorbed_incident_id: str
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class IncidentSplitRequest(BaseModel):
+    observation_ids: List[str] = Field(min_length=1)
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class IncidentSummaryResponse(BaseModel):
+    id: str
+    provider_id: str
+    state: str
+    classification_family: str
+    classification_version: str
+    classification_confidence: float
+    confidence_band: str
+    review_band: str
+    first_event_time: Optional[datetime]
+    last_event_time: Optional[datetime]
+    canonical_location: Optional[str]
+    contradiction_count: int
+    review_signal_status: str
+    review_signal_issued_at: Optional[datetime]
+    review_signal_revoked_at: Optional[datetime]
+    review_signal_revocation_reason: Optional[str]
+    observation_count: int
+    is_active: bool
+    merged_into_id: Optional[str]
+
+
+class IncidentDetailResponse(IncidentSummaryResponse):
+    canonical_event_type: Optional[str]
+    canonical_grid: Optional[str]
+    canonical_agency: Optional[str]
+    canonical_station: Optional[str]
+    classification_explanation: Dict[str, Any]
+    current_explanation: Dict[str, Any]
+    source_acquisition_modes: List[str]
+    source_retrieval_ids: List[str]
+    observations: List[ObservationResponse]
+    source_row_ids: List[str]
+    relationship_history: List[Dict[str, Any]]
+    timeline: List[Dict[str, Any]]
+    evidence: List[Dict[str, Any]]
+    match_decisions: List[Dict[str, Any]]
+    aliases: List[Dict[str, Any]]
