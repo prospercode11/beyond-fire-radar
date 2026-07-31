@@ -4,7 +4,7 @@ Beyond Fire Radar is an internal, research-only property-loss intelligence syste
 
 ## Current scope
 
-Phase 0 and Phase 1 are complete in this repository:
+Phase 0, Phase 1, and the Phase 2 dispatch-ingestion implementation are complete in this repository:
 
 - Architecture, product, modeling, compliance, data, testing, execution, and handoff documents.
 - FastAPI modular-monolith API with SQLAlchemy and Alembic migrations.
@@ -13,9 +13,10 @@ Phase 0 and Phase 1 are complete in this repository:
 - Immutable audit events for security-sensitive actions.
 - Provider registry and provider health metadata, with Sarasota live polling disabled by default.
 - Synthetic fixture metadata for repeatable foundation tests. Fixtures are never accuracy evidence.
+- Authorized manual CSV/HTML/JSON snapshot ingestion for the Sarasota dispatch source, with immutable raw preservation, versioned parsing, taxonomy, schema alerts, replay protection, and retrieval health.
 - Small Next.js TypeScript shell that reports foundation status.
 
-Dispatch parsing, property imports, geospatial matching, learned scoring, notifications, and outreach are Phase 2+ work and are not implemented here.
+Canonical incident assembly, property imports, geospatial matching, learned scoring, notifications, and outreach remain later phases and are not implemented here.
 
 ## Local setup
 
@@ -41,6 +42,10 @@ npm --prefix apps/web run dev
 Open [http://localhost:3000](http://localhost:3000). The API is available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
 The first user can be created once with the configured `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` through `POST /api/v1/auth/bootstrap`. The bootstrap endpoint is closed after the first user exists.
+
+## Phase 2 dispatch import
+
+Live Sarasota polling is intentionally disabled. An authorized internal user can import a manually obtained snapshot with `POST /api/v1/providers/sarasota.official_dispatch/snapshots`, using multipart field `file`, form field `authorized_snapshot=true`, and a unique `Idempotency-Key` header. The repository fixtures under `apps/api/fixtures/` are deterministic test inputs only; they are not external-source evidence.
 
 ## Verification
 

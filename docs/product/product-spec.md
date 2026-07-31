@@ -20,7 +20,7 @@ The primary optimization target is high precision among the first opportunities 
 
 The system does not state that a property sustained damage, has insurance coverage, has a valid claim, should file a claim, will hire Beyond Adjusting, or has a predicted payment. It does not perform consumer outreach, claim filing, contract generation, or automated recommendations. Any later outreach capability requires separate legal approval, feature flags, human approval, and auditable controls.
 
-## Phase 0 and Phase 1 product slice
+## Phase 0 through Phase 2 product slice
 
 The current slice establishes:
 
@@ -29,9 +29,10 @@ The current slice establishes:
 3. Secure-enough local bootstrap authentication, database sessions, and role primitives.
 4. Immutable audit-event storage for security-sensitive actions.
 5. A provider registry capable of representing authorized, disabled, fixture, and not-yet-verified sources.
-6. A runnable web shell that does not imply an operational dashboard.
+6. Authorized manual Sarasota dispatch snapshot ingestion with preserved raw evidence, parser/schema versions, replay protection, and visible health/errors.
+7. A runnable web shell that does not imply an operational dashboard.
 
-Phase 2 begins dispatch ingestion and is intentionally outside the current slice.
+Canonical incidents, property resolution, scoring, and workflow remain outside the current slice.
 
 ## Future user outcomes
 

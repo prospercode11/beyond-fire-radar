@@ -59,3 +59,4 @@ def require_role(*role_names: str):
 
 
 AdminUser = Annotated[User, Depends(require_role("administrator"))]
+IngestionUser = Annotated[User, Depends(require_role("administrator", "analyst", "researcher"))]

@@ -1,4 +1,4 @@
-# Foundation threat model
+# Foundation and dispatch-ingestion threat model
 
 ## Assets
 
@@ -10,16 +10,16 @@
 
 ## Threats and controls
 
-| Threat | Phase 1 control | Residual risk |
+| Threat | Phase 1/2 control | Residual risk |
 | --- | --- | --- |
 | Unauthenticated access | Bearer sessions, password verification, protected routes | Production identity provider, MFA, rate limiting, and session rotation are later hardening work |
 | Privilege escalation | Server-side role dependency and administrator-only provider disable/audit routes | User provisioning and complete authorization matrix are future work |
 | Token leakage | Only token hash is stored; bearer token is returned once | HTTPS, secure browser storage, rotation, and revocation endpoint hardening require production review |
-| Source misuse | Provider authorization status, disabled live provider, explicit limitations | Written source approvals and terms are not yet present |
-| Data tampering | Migrations, immutable raw snapshot contract, audit records | Database/operator access and retention controls require production hardening |
-| False model claims | No Phase 1 probabilities or accuracy claims; synthetic fixture is labeled | Future models require real held-out labels and calibration gates |
+| Source misuse | Provider authorization status, disabled live provider, manual-upload attestation, explicit limitations | Written source approvals and terms are not yet present; no approved snapshot is stored |
+| Data tampering | Migrations, content-addressed immutable snapshot store, raw row preservation, audit records | Database/operator access and retention controls require production hardening |
+| False model claims | No probabilities or accuracy claims; source wording and unknown taxonomy are preserved | Future models require real held-out labels and calibration gates |
 | Unauthorized outreach | No outreach routes, jobs, or sender integration | Future work must remain feature-flagged and legally approved |
-| Replay/idempotency failure | Hash/idempotency columns exist in schema and provider contract | Actual retrieval/replay pipeline begins in Phase 2 |
+| Replay/idempotency failure | Provider-scoped idempotency keys, content hashes, and unique raw/normalized row constraints | Concurrent multi-writer behavior and production database testing require the external integration environment |
 
 ## Required production follow-up
 

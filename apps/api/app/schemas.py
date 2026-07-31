@@ -49,6 +49,96 @@ class ProviderListResponse(BaseModel):
     providers: list[ProviderResponse]
 
 
+class ProviderHealthResponse(BaseModel):
+    provider_id: str
+    last_successful_retrieval: Optional[datetime]
+    last_changed_retrieval: Optional[datetime]
+    last_snapshot_hash: Optional[str]
+    last_retrieval_status: Optional[str]
+    failure_count: int
+    circuit_state: str
+    schema_drift_detected: bool
+    schema_alert_count: int
+    known_status_note: str
+
+
+class ParserVersionResponse(BaseModel):
+    provider_id: str
+    version: str
+    format: str
+    expected_fields: List[str]
+    required_fields: List[str]
+    active: bool
+
+
+class ImportJobResponse(BaseModel):
+    import_job_id: str
+    retrieval_id: str
+    provider_id: str
+    status: str
+    format: str
+    parser_version: str
+    schema_version: str
+    content_hash: str
+    normalized_record_count: int
+    rejected_record_count: int
+    schema_alert_count: int
+    replayed: bool
+    error: Optional[str]
+
+
+class SchemaAlertResponse(BaseModel):
+    id: str
+    retrieval_id: str
+    provider_id: str
+    parser_version: str
+    severity: str
+    code: str
+    observed_fields: List[str]
+    missing_required_fields: List[str]
+    unexpected_fields: List[str]
+    message: str
+    created_at: datetime
+
+
+class ObservationResponse(BaseModel):
+    id: str
+    raw_dispatch_row_id: str
+    source_record_id: str
+    source_event_id: Optional[str]
+    source_case_number: Optional[str]
+    agency: Optional[str]
+    station: Optional[str]
+    event_time: Optional[datetime]
+    retrieved_at: datetime
+    original_event_type: str
+    normalized_event_family: str
+    original_location: str
+    grid: Optional[str]
+    parser_confidence: float
+    parser_version: str
+    taxonomy_version: str
+    raw_payload_reference: str
+
+
+class ImportErrorResponse(BaseModel):
+    id: str
+    import_job_id: str
+    row_number: Optional[int]
+    code: str
+    message: str
+
+
+class ParserComparisonResponse(BaseModel):
+    retrieval_id: str
+    parser_version: str
+    schema_version: str
+    format: str
+    normalized_record_count: int
+    rejected_record_count: int
+    schema_alerts: List[str]
+
+
 class AuditResponse(BaseModel):
     id: str
     actor_user_id: Optional[str]

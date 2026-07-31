@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import app.main as main_module
 import pytest
 from app.db import Base, get_db
 from app.main import app
@@ -28,8 +29,10 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             db.close()
 
     app.dependency_overrides[get_db] = override_db
+    monkeypatch.setattr(main_module, "SessionLocal", TestingSessionLocal)
     monkeypatch.setenv("BOOTSTRAP_ADMIN_EMAIL", "admin@example.com")
     monkeypatch.setenv("BOOTSTRAP_ADMIN_PASSWORD", "development-password-123")
+    monkeypatch.setenv("RAW_SNAPSHOT_DIR", str(tmp_path / "raw-snapshots"))
     from app.config import get_settings
 
     get_settings.cache_clear()

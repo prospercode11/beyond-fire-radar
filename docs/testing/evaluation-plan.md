@@ -11,6 +11,16 @@
 - Health/readiness endpoints run.
 - Web shell produces a production build.
 
+## Phase 2 gate
+
+- Fresh SQLite migration upgrade, downgrade, and re-upgrade succeed.
+- Sarasota CSV/HTML/JSON parser contracts preserve raw/source fields and version metadata.
+- Parser failure, missing required fields, and zero-row anomalies are persisted and exposed through the API.
+- Same-payload replay is idempotent at both idempotency-key and content-hash levels.
+- Provider health records successful and failed retrieval state without deleting prior usable data.
+- Live Sarasota polling remains disabled; no Boca radio or Broadcastify source is used.
+- A real approved Sarasota snapshot must be attached separately to close the external-source gate; repository fixtures are not evidence.
+
 ## Test layers
 
 1. Unit: password/session hashing, provider contract behavior, fixture shape.

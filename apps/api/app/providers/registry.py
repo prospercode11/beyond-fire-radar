@@ -74,10 +74,10 @@ def build_registry(settings: Settings) -> ProviderRegistry:
         enabled_by_default=True,
         polling_interval_seconds=None,
         schema_version="fixture.v1",
-        parser_version="not_started",
+        parser_version="sarasota.dispatch.v1",
         license_note="Synthetic records only. Never use as evidence of operational accuracy.",
-        limitations="No parser or live source integration is included in Phase 1.",
-        contact_note="Replace with an approved source registration in a later phase.",
+        limitations="Synthetic records only; they are not evidence of operational accuracy.",
+        contact_note="Test fixture for deterministic parser and replay tests.",
     )
     live_metadata = ProviderMetadata(
         provider_id="sarasota.official_dispatch",
@@ -89,10 +89,10 @@ def build_registry(settings: Settings) -> ProviderRegistry:
         authorized_use_status="authorization_required",
         enabled_by_default=False,
         polling_interval_seconds=None,
-        schema_version="unverified",
-        parser_version="not_started",
+        schema_version="sarasota.dispatch.schema.v1",
+        parser_version="sarasota.dispatch.v1",
         license_note="Terms and authorized automated use must be confirmed before activation.",
-        limitations="CAPTCHA/access controls/rate limits must not be bypassed. Live polling is disabled.",
+        limitations="CAPTCHA/access controls/rate limits must not be bypassed. Live polling is disabled; manual imports require an authorization attestation.",
         contact_note="Written approval and source documentation required.",
     )
     return ProviderRegistry(

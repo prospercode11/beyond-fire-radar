@@ -16,7 +16,8 @@ Beyond Fire Radar is an internal research and review tool. It is not a consumer-
 - Show internal reviewers that a record is a possible property loss and not independently verified.
 - Record human review labels, suppressions, existing-client status, do-not-contact status, and legal approvals.
 - Keep research-only organizational relationships with source, date, verification status, confidence, legal-use category, and last-verified date once those records are added.
+- Phase 2 manual snapshot ingestion requires an explicit authorization attestation and retains the raw source bytes for review.
 
 ## Future outreach gate
 
-Any outreach module requires written legal approval, a separate feature flag, approved templates and sender identity, consent/opt-out controls where applicable, time-window enforcement, human approval, and complete logs. No such integration exists in Phase 1.
+Any outreach module requires written legal approval, a separate feature flag, approved templates and sender identity, consent/opt-out controls where applicable, time-window enforcement, human approval, and complete logs. No consumer-outreach integration exists in Phase 2.

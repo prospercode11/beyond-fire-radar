@@ -44,6 +44,31 @@ def main() -> None:
         if me.json()["email"] != email:
             raise RuntimeError("authenticated identity mismatch")
 
+        snapshot_path = (
+            Path(__file__).resolve().parents[1] / "apps/api/fixtures/sample_sarasota_dispatch.csv"
+        )
+        with snapshot_path.open("rb") as snapshot:
+            upload = client.post(
+                "/api/v1/providers/fixture.sarasota.dispatch/snapshots",
+                headers={**headers, "Idempotency-Key": "api-smoke-phase2"},
+                files={"file": (snapshot_path.name, snapshot, "text/csv")},
+                data={"authorized_snapshot": "false"},
+            )
+        upload.raise_for_status()
+        if upload.json()["normalized_record_count"] != 3:
+            raise RuntimeError("dispatch snapshot did not produce the expected normalized rows")
+
+        with snapshot_path.open("rb") as snapshot:
+            replay = client.post(
+                "/api/v1/providers/fixture.sarasota.dispatch/snapshots",
+                headers={**headers, "Idempotency-Key": "api-smoke-phase2"},
+                files={"file": (snapshot_path.name, snapshot, "text/csv")},
+                data={"authorized_snapshot": "false"},
+            )
+        replay.raise_for_status()
+        if not replay.json()["replayed"]:
+            raise RuntimeError("dispatch snapshot replay was not reported")
+
     print("API smoke test passed")
 
 

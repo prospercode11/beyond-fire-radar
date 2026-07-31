@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     bootstrap_admin_email: str = "admin@example.com"
     bootstrap_admin_password: str = "change-me-in-development"
     web_origin: str = "http://localhost:3000"
+    raw_snapshot_dir: str = "data/raw-snapshots"
+    max_snapshot_bytes: int = Field(default=10_000_000, ge=1024, le=100_000_000)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
 

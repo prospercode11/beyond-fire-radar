@@ -25,7 +25,7 @@ flowchart LR
 4. Owner and organization data is restricted and is never automatically contacted.
 5. Model outputs are governed artifacts, not facts.
 
-## Phase 1 request flow
+## Phase 2 request flow
 
 ```mermaid
 sequenceDiagram
@@ -42,6 +42,10 @@ sequenceDiagram
   A->>DB: Check session and role
   DB-->>A: Provider metadata
   A-->>W: Authorized provider list
+  U->>W: Upload approved dispatch snapshot
+  W->>A: POST /providers/{id}/snapshots + Idempotency-Key
+  A->>DB: Persist retrieval, job, raw reference, parse result, health, audit
+  A-->>W: Status, counts, parser/schema version, replay state
 ```
 
-The raw provider retrieval and domain pipelines are not part of Phase 1; the registry contract is testable without pretending an external feed was retrieved.
+Manual snapshot ingestion is the Phase 2 boundary. The live Sarasota provider remains disabled behind the feature flag, and no Boca radio or Broadcastify source is in scope. Canonical incident and property pipelines are later phases.

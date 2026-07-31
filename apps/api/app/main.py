@@ -38,7 +38,7 @@ app.add_middleware(
     allow_origins=[settings.web_origin],
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
 )
 
 
@@ -59,7 +59,7 @@ def healthz() -> dict[str, object]:
         "status": "ok",
         "service": settings.app_name,
         "live_polling_enabled": settings.enable_live_sarasota_dispatch_polling,
-        "phase": "1-foundation",
+        "phase": "2-dispatch-ingestion",
     }
 
 
@@ -75,4 +75,5 @@ def readyz() -> JSONResponse:
 
 app.include_router(auth.router)
 app.include_router(providers.router)
+app.include_router(providers.retrieval_router)
 app.include_router(admin.router)
