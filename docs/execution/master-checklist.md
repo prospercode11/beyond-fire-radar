@@ -64,6 +64,20 @@
 - [x] Phase 3 handoff and execution documents recorded.
 - [ ] PostgreSQL/PostGIS and Redis integration execution: Docker/Colima unavailable in this environment.
 
+## Phase 4 — Property ingestion and resolution
+
+- [x] Migration-owned property imports, immutable source rows, mapping profiles, parcel/address/building projections, field provenance, and rollback lineage.
+- [x] Manual/file CSV, XLSX, and ZIP workflows with previews, mappings, schema/row errors, duplicate detection, replay protection, full/incremental replacement, removals, and audited rollback.
+- [x] Versioned normalization for exact/unit/directional/street/block/intersection/highway/landmark/malformed locations while retaining originals.
+- [x] Deterministic and explainable candidate generation across address, aliases, street/house, municipality/ZIP, coordinates, grid/context, and master/unit relationships.
+- [x] Score, margin, confidence/review bands, contradictions, quality limitations, abstention, no exact marker for low-precision locations, and human decisions through reprocessing.
+- [x] Authenticated provenance inspection exposes current import, source row, raw payload, field transformations, aliases, and building projections.
+- [x] Adversarial tests cover XLSX/ZIP variations, malformed addresses, units/blocks/highways/intersections, replay, rejected rows, full removal, rollback, provenance, unit ambiguity, and human decisions.
+- [x] Independent Luna review completed; all critical/high implementation findings addressed.
+- [x] Formatting, lint, type, unit, migration round-trip, API smoke, and isolated application/API checks recorded.
+- [ ] Official Sarasota property-source approval/terms evidence and approved real snapshot: external gate remains open.
+- [ ] PostgreSQL/PostGIS and Redis integration execution: Docker/Colima unavailable in this environment.
+
 ## Phase gate rule
 
-Phase 4 must not start until the Phase 3 handoff is accepted and the external-source/integration evidence is separately reviewed. Live Sarasota polling, property resolution, scoring, dashboard, outreach, Boca, Broadcastify, and later phases remain out of scope for this commit.
+Phase 5 must not start until the Phase 4 handoff is accepted. Live Sarasota polling, official property automation, scoring, dashboard, outreach, Boca, Broadcastify, and later phases remain separately gated by their requirements.

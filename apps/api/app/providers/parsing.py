@@ -25,6 +25,8 @@ EXPECTED_FIELDS = [
     "zone",
     "source_case_number",
     "source_event_id",
+    "latitude",
+    "longitude",
 ]
 REQUIRED_FIELDS = ["time", "event_type", "location"]
 LOCAL_TIMEZONE = ZoneInfo("America/New_York")
@@ -58,6 +60,9 @@ class ParsedDispatchRow:
     original_event_type: str
     normalized_event_family: str
     original_location: str
+    location_precision: Optional[str]
+    latitude: Optional[float]
+    longitude: Optional[float]
     grid: Optional[str]
     agency: Optional[str]
     station: Optional[str]
@@ -113,16 +118,22 @@ def _canonical_header(field_name: str) -> Optional[str]:
     key = _header_key(field_name)
     if key in {"date", "event_date", "incident_date", "_group_date"}:
         return "date"
-    if key in {"time", "event_time", "incident_time"}:
+    if key in {"time", "event_time", "event_datetime", "datetime", "timestamp", "incident_time"}:
         return "time"
     if key in {"event", "event_type", "incident_type", "call_type", "nature"}:
         return "event_type"
     if key.startswith("event_") and key.split("_")[-1].isdigit():
         return "source_event_id"
-    if key in {"event_id", "shared_event_number", "shared_event", "fr_event"}:
+    if key in {"event_id", "source_event_id", "shared_event_number", "shared_event", "fr_event"}:
         return "source_event_id"
     if key in {"location", "address", "incident_location", "situs"}:
         return "location"
+    if key in {"latitude", "lat", "y", "y_coordinate"}:
+        return "latitude"
+    if key in {"longitude", "lon", "lng", "long", "x", "x_coordinate"}:
+        return "longitude"
+    if key in {"location_precision", "address_precision", "geocode_precision"}:
+        return "location_precision"
     if key in {"grid", "dispatch_grid"}:
         return "grid"
     if key in {"zone", "station", "responding_station", "agency_station"}:
@@ -188,6 +199,17 @@ def _zone_parts(zone: str) -> Tuple[Optional[str], Optional[str]]:
     return station, station
 
 
+def _coordinate(raw: Any, *, minimum: float, maximum: float) -> Optional[float]:
+    value = _clean(raw)
+    if not value:
+        return None
+    try:
+        parsed = float(value)
+    except ValueError:
+        return None
+    return parsed if minimum <= parsed <= maximum else None
+
+
 def _value(raw: Dict[str, Any], aliases: Sequence[str]) -> str:
     for alias in aliases:
         value = _clean(raw.get(alias))
@@ -226,6 +248,10 @@ def _canonicalize(raw: Dict[str, Any], row_number: int) -> ParsedDispatchRow:
     agency, station = _zone_parts(_value(raw, ("zone", "station", "responding_station")))
     normalized_event = classify_event(original_event)
     confidence = 1.0 if event_time is not None else 0.7
+    latitude = _coordinate(raw.get("latitude") or raw.get("lat"), minimum=-90.0, maximum=90.0)
+    longitude = _coordinate(
+        raw.get("longitude") or raw.get("lon") or raw.get("lng"), minimum=-180.0, maximum=180.0
+    )
     return ParsedDispatchRow(
         row_number=row_number,
         source_record_id=source_record_id,
@@ -235,6 +261,9 @@ def _canonicalize(raw: Dict[str, Any], row_number: int) -> ParsedDispatchRow:
         original_event_type=original_event,
         normalized_event_family=normalized_event,
         original_location=location,
+        location_precision=_value(raw, ("location_precision", "address_precision")) or None,
+        latitude=latitude,
+        longitude=longitude,
         grid=_value(raw, ("grid", "dispatch_grid")) or None,
         agency=agency,
         station=station,

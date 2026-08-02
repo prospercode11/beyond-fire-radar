@@ -1,7 +1,7 @@
 # Current state
 
-Updated: 2026-07-31 after Phase 3 verification
-Scope: Phase 0 through Phase 3 only
+Updated: 2026-08-01 after Phase 4 verification
+Scope: Phase 0 through Phase 4 only
 
 ## Implemented
 
@@ -23,17 +23,23 @@ Scope: Phase 0 through Phase 3 only
 - Audited manual incident merge and split controls with source-row preservation.
 - Phase 3 migrations `0004_incident_intelligence` through `0006_scope_incident_aliases_by_provider`, API routes, adversarial tests, replay verification, independent review, and handoff.
 - Independent reviews and handoffs in `docs/reviews/phase-01-foundation-review.md`, `docs/reviews/phase-02-dispatch-ingestion-review.md`, `docs/handoffs/phase-01-foundation.md`, `docs/handoffs/phase-02-dispatch-ingestion.md`, and the Phase 3 review/handoff produced for this commit.
+- Phase 4 migration `0007_property_resolution` with provider-scoped property imports, immutable source rows, mapping profiles, current parcel/building/address projections, field-level provenance, and rollback lineage.
+- Manual/file property ingestion for CSV, XLSX, and ZIP, including preview, mappings, schema/row errors, duplicate detection, full/incremental modes, idempotent replay, full replacement/removals, and audited rollback.
+- Versioned address normalization for exact addresses, units, directional/street variants, blocks, intersections, highways/routes, landmarks, and malformed locations; original values remain available.
+- Explainable parcel candidate generation using normalized addresses, aliases, street/house, municipality/ZIP, coordinates, grid/context, and master/unit relationships with explicit score/margin, contradictions, quality, abstention, and human-review evidence.
+- Authenticated property import, parcel provenance, match/reprocess, and human confirm/reject/clear/correct APIs; human decisions remain visible after reprocessing.
+- Phase 4 focused adversarial tests, migration round-trip, isolated application/API verification, independent Luna review, and corrected high-severity findings.
 
 ## Explicitly not implemented
 
-Live Sarasota polling, cross-source deduplication, property/tax-roll/GIS/permit imports, address-to-parcel matching, candidate generation, opportunity scoring, calibration, opportunity workflow, notifications, maps, dashboard work, model lab, and consumer outreach.
+Live Sarasota polling, cross-source deduplication, GIS/permit imports, opportunity scoring, calibration, opportunity workflow, notifications, maps, dashboard work, model lab, and consumer outreach.
 
 ## Environment evidence
 
 The host has Docker CLI but its configured Colima daemon is not running, and the Docker Compose plugin is not installed. Therefore the Compose definitions are present but PostgreSQL/PostGIS/Redis integration could not be truthfully claimed as executed in this environment. SQLite migration and application tests are the runnable local path. The parser also accepted a one-time current HTML response from the official Sarasota dispatch page for shape verification; that is not an authorization claim or an activated polling integration.
 
-The external-source approval gate remains intact. Phase 3 processing accepts only retrievals explicitly labeled `manual_snapshot` or `synthetic_fixture`; it does not authorize, enable, or process live polling. The upload attestation and provider limitations remain visible, no legal approval is invented, and source acquisition mode is returned in retrieval, processing, and incident detail responses. PostgreSQL/PostGIS and Redis execution remains unavailable on this host.
+The external-source approval gate remains intact. Dispatch processing accepts only retrievals explicitly labeled `manual_snapshot` or `synthetic_fixture`; property processing accepts manual/file workflows with an explicit authorization attestation for the official provider and labels synthetic fixture imports separately. No live polling is enabled or implied, no legal approval is invented, and acquisition mode is returned in import, retrieval, processing, incident, parcel, and match evidence. PostgreSQL/PostGIS and Redis execution remains unavailable on this host.
 
 ## Next controlled step
 
-Phase 4 — property resolution — is the next controlled step. It must not begin in this commit. Before that phase, review the Phase 3 handoff, resolve the separately tracked external approval/integration evidence, and keep live Sarasota polling disabled.
+Phase 5 — transparent opportunity-scoring foundation — is the next controlled step. It must remain separate from property identity resolution and must not infer insurance coverage, claim validity, or consumer contact eligibility. Keep live Sarasota polling and the official property-source integration disabled until their external evidence gates are closed.

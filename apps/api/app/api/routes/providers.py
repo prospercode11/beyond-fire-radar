@@ -266,6 +266,30 @@ def seed_providers(db: DbSession) -> None:
         else:
             existing.schema_version = metadata.schema_version
             existing.parser_version = metadata.parser_version
+            existing.name = metadata.name
+            existing.source_authority = metadata.source_authority
+            existing.geographic_coverage = metadata.geographic_coverage
+            existing.data_type = metadata.data_type
+            existing.authentication_method = metadata.authentication_method
+            existing.authorized_use_status = metadata.authorized_use_status
+            existing.enabled = metadata.enabled_by_default
+            existing.polling_interval_seconds = metadata.polling_interval_seconds
+            existing.license_note = metadata.license_note
+            existing.limitations = metadata.limitations
+            existing.contact_note = metadata.contact_note
+            if (
+                db.scalar(
+                    select(ProviderHealth).where(ProviderHealth.provider_id == metadata.provider_id)
+                )
+                is None
+            ):
+                db.add(
+                    ProviderHealth(
+                        id=metadata.provider_id,
+                        provider_id=metadata.provider_id,
+                        known_status_note="No property or dispatch retrieval has run yet.",
+                    )
+                )
     seed_parser_versions(db)
 
 
@@ -320,6 +344,9 @@ def _observation_response(item: DispatchObservation) -> ObservationResponse:
         original_event_type=item.original_event_type,
         normalized_event_family=item.normalized_event_family,
         original_location=item.original_location,
+        location_precision=item.location_precision,
+        latitude=item.latitude,
+        longitude=item.longitude,
         grid=item.grid,
         parser_confidence=item.parser_confidence,
         parser_version=item.parser_version,

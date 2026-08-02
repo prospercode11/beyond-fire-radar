@@ -61,3 +61,7 @@ def require_role(*role_names: str):
 AdminUser = Annotated[User, Depends(require_role("administrator"))]
 IngestionUser = Annotated[User, Depends(require_role("administrator", "analyst", "researcher"))]
 IncidentEditor = Annotated[User, Depends(require_role("administrator", "analyst"))]
+PropertyImporter = Annotated[User, Depends(require_role("administrator", "analyst", "researcher"))]
+PropertyReviewer = Annotated[
+    User, Depends(require_role("administrator", "licensed_adjuster", "analyst"))
+]

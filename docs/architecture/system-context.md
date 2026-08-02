@@ -25,7 +25,7 @@ flowchart LR
 4. Owner and organization data is restricted and is never automatically contacted.
 5. Model outputs are governed artifacts, not facts.
 
-## Phase 2 and Phase 3 request flow
+## Phase 2 through Phase 4 request flow
 
 ```mermaid
 sequenceDiagram
@@ -50,6 +50,13 @@ sequenceDiagram
   W->>A: POST /incidents/process/retrievals/{retrieval_id}
   A->>DB: Verify acquisition mode, assemble/link observations, persist decisions/evidence/timeline
   A-->>W: Processing counts, linkage/classification versions, review/contradiction counts
+  U->>W: Preview/import a manually supplied property file
+  W->>A: POST /properties/imports/preview or /properties/imports
+  A->>DB: Verify provider type/attestation, persist raw file, source rows, projections, provenance, audit
+  U->>W: Request property candidates or record human review decision
+  W->>A: POST /incidents/{id}/property-matches or /property-matches/decisions
+  A->>DB: Generate versioned candidates, preserve evidence, or persist reviewed decision
+  A-->>W: Candidates, abstention, explanations, provenance, and review state
 ```
 
-Manual snapshot ingestion and Sarasota-only incident processing are the Phase 2/3 boundary. Retrievals carry `manual_snapshot` or `synthetic_fixture` provenance; live-collected input is rejected while `ENABLE_LIVE_SARASOTA_DISPATCH_POLLING=false`. The external approval gate is not removed or bypassed. No Boca radio, Broadcastify, property, scoring, dashboard, or outreach source is in scope.
+Manual snapshot ingestion and Sarasota-only incident processing are the Phase 2/3 boundary. Phase 4 adds manual/file property workflows only. Dispatch retrievals carry `manual_snapshot` or `synthetic_fixture` provenance; official property imports require an explicit authorization attestation and synthetic fixture imports are labeled separately. Live-collected input and automated official property retrieval remain disabled. The external approval gate is not removed or bypassed. No Boca radio, Broadcastify, scoring, dashboard, or outreach source is in scope.

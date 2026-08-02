@@ -10,7 +10,7 @@ def test_health_explicitly_reports_phase_and_live_polling_state(client: TestClie
         "status": "ok",
         "service": "Beyond Fire Radar",
         "live_polling_enabled": False,
-        "phase": "3-incident-intelligence",
+        "phase": "4-property-resolution",
     }
 
 

@@ -79,6 +79,19 @@ def test_sarasota_csv_parser_handles_duplicate_event_headers() -> None:
     assert result.rows[1].original_event_type == "ALARM SOUNDING"
 
 
+def test_json_event_datetime_satisfies_time_schema_requirement() -> None:
+    result = parse_snapshot(
+        b'{"records":[{"event_datetime":"2026-07-31T10:00:00Z","event_type":"STRUCTURE FIRE","location":"1 TEST WAY","source_event_id":"E-TEST"}]}',
+        "application/json",
+        "event-datetime.json",
+    )
+
+    assert result.schema is not None
+    assert result.schema.missing_required_fields == []
+    assert result.issues == []
+    assert len(result.rows) == 1
+
+
 def test_unknown_event_does_not_claim_fire_signal() -> None:
     result = parse_snapshot(
         b"Date,Time,Event,Location\n07/31/26,10:00,ODD CALL,1 TEST WAY\n",

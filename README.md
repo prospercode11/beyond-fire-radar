@@ -17,7 +17,7 @@ Phase 0 through Phase 3 — Sarasota incident intelligence — are complete in t
 - Canonical Sarasota incidents with conservative deterministic/probabilistic linkage, source-row provenance, contradiction evidence, versioned classification, timelines, state transitions, rescore hooks, and audited merge/split controls.
 - Small Next.js TypeScript shell that reports foundation status.
 
-Property imports, address-to-parcel matching, learned scoring, dashboard work, notifications, Boca/Broadcastify, and outreach remain later phases and are not implemented here.
+Phase 4 now provides a manual/file prototype for Sarasota property imports and explainable address-to-parcel resolution. CSV/XLSX/ZIP imports, provenance, rollback, candidate evidence, abstention, and human review are available through authenticated APIs. Official property-source approval, live polling, learned scoring, dashboard work, notifications, Boca/Broadcastify, and outreach remain gated later phases; the repository fixture is not real-world accuracy evidence.
 
 ## Local setup
 

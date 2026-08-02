@@ -32,6 +32,15 @@
 - Manual state transitions reject unsupported states/transitions and are audited.
 - No Phase 4 property, scoring, dashboard, outreach, Boca, Broadcastify, or broader machine-learning work is included.
 
+## Phase 4 gate
+
+- Fresh migration upgrade, downgrade, and re-upgrade include property imports, immutable source rows, parcels, aliases/buildings, field provenance, match runs, candidates, features, and human decisions.
+- CSV, XLSX, and ZIP imports preserve original payloads/rows and support mapping previews, mixed valid header spellings, duplicate/rejected row reporting, full/incremental changes, replay, removals, and rollback along explicit import lineage.
+- Address cases cover exact/unit/directional/street/block/intersection/highway/landmark/malformed locations; low-precision and unit-ambiguous incidents abstain and never expose an exact marker.
+- Candidate generation and explanations expose address/alias/street/house/location/geographic/master-unit evidence, contradictions, quality flags, score/margin, versions, and review/abstention outcomes.
+- Parcel API provenance exposes current import/source row/raw payload/field transformations/aliases/buildings; human property decisions survive reprocessing and are audited.
+- The official property source approval gate remains open; the synthetic fixture is not evidence of real-world accuracy. PostgreSQL/PostGIS/Redis execution remains unavailable in this environment.
+
 ## Test layers
 
 1. Unit: password/session hashing, provider contract behavior, fixture shape.

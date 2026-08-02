@@ -48,6 +48,19 @@ class SarasotaDispatchProvider:
         )
 
 
+class SarasotaPropertyAppraiserProvider:
+    def __init__(self, metadata: ProviderMetadata) -> None:
+        self.metadata = metadata
+
+    def can_retrieve(self) -> bool:
+        return False
+
+    def retrieve(self) -> ProviderSnapshot:
+        raise ProviderDisabledError(
+            "automated Sarasota property retrieval is disabled until source terms and written authorization are confirmed"
+        )
+
+
 @dataclass
 class ProviderRegistry:
     providers: dict[str, Provider]
@@ -62,6 +75,9 @@ class ProviderRegistry:
 def build_registry(settings: Settings) -> ProviderRegistry:
     fixture_path = (
         Path(__file__).resolve().parents[2] / "fixtures" / "sample_dispatch_snapshot.json"
+    )
+    property_fixture_path = (
+        Path(__file__).resolve().parents[2] / "fixtures" / "sample_sarasota_property_appraiser.csv"
     )
     fixture_metadata = ProviderMetadata(
         provider_id="fixture.sarasota.dispatch",
@@ -95,10 +111,46 @@ def build_registry(settings: Settings) -> ProviderRegistry:
         limitations="CAPTCHA/access controls/rate limits must not be bypassed. Live polling is disabled; manual imports require an authorization attestation.",
         contact_note="Written approval and source documentation required.",
     )
+    property_fixture_metadata = ProviderMetadata(
+        provider_id="fixture.sarasota.property_appraiser",
+        name="Synthetic Sarasota property-appraiser fixture",
+        source_authority="Synthetic fixture; not an external authority",
+        geographic_coverage="Sarasota County, Florida (synthetic)",
+        data_type="property_bulk_file",
+        authentication_method="none",
+        authorized_use_status="test_only",
+        enabled_by_default=True,
+        polling_interval_seconds=None,
+        schema_version="sarasota.property.schema.v1",
+        parser_version="sarasota.property.v1",
+        license_note="Synthetic records only. Never use as evidence of property-match accuracy.",
+        limitations="Synthetic records only; they are not evidence of real property data or matching accuracy.",
+        contact_note="Test fixture for deterministic import, address, and matching tests.",
+    )
+    property_metadata = ProviderMetadata(
+        provider_id="sarasota.property_appraiser",
+        name="Sarasota County Property Appraiser bulk datasets",
+        source_authority="Sarasota County Property Appraiser",
+        geographic_coverage="Sarasota County, Florida",
+        data_type="property_bulk_file",
+        authentication_method="to_be_confirmed",
+        authorized_use_status="authorization_required",
+        enabled_by_default=False,
+        polling_interval_seconds=None,
+        schema_version="sarasota.property.schema.v1",
+        parser_version="sarasota.property.v1",
+        license_note="Source terms and authorized import use must be confirmed before operational use.",
+        limitations="Manual/file import only; no automated retrieval is enabled; source versions and mappings must be retained.",
+        contact_note="Written source approval and current field documentation required.",
+    )
     return ProviderRegistry(
         providers={
             fixture_metadata.provider_id: FixtureProvider(fixture_metadata, fixture_path),
             live_metadata.provider_id: SarasotaDispatchProvider(live_metadata, settings),
+            property_fixture_metadata.provider_id: FixtureProvider(
+                property_fixture_metadata, property_fixture_path
+            ),
+            property_metadata.provider_id: SarasotaPropertyAppraiserProvider(property_metadata),
         }
     )
 

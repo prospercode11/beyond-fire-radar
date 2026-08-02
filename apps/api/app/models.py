@@ -15,6 +15,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -303,6 +304,9 @@ class DispatchObservation(Base):
     original_event_type: Mapped[str] = mapped_column(String(200), nullable=False)
     normalized_event_family: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     original_location: Mapped[str] = mapped_column(Text, nullable=False)
+    location_precision: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     grid: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     parser_confidence: Mapped[float] = mapped_column(Float, nullable=False)
     parser_version: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -625,3 +629,354 @@ class IncidentDisposition(Base):
     source_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     recorded_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class PropertyMappingProfile(Base):
+    __tablename__ = "property_mapping_profiles"
+    __table_args__ = (
+        UniqueConstraint("provider_id", "name", name="uq_property_mapping_profile_provider_name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    provider_id: Mapped[str] = mapped_column(ForeignKey("providers.id"), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    mapping: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    version: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class PropertyImport(Base):
+    __tablename__ = "property_imports"
+    __table_args__ = (
+        UniqueConstraint("provider_id", "idempotency_key", name="uq_property_import_provider_key"),
+        UniqueConstraint("provider_id", "content_hash", name="uq_property_import_provider_hash"),
+        Index(
+            "uq_property_import_current_provider",
+            "provider_id",
+            unique=True,
+            sqlite_where=text("is_current = 1"),
+            postgresql_where=text("is_current = true"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    provider_id: Mapped[str] = mapped_column(ForeignKey("providers.id"), index=True, nullable=False)
+    mapping_profile_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("property_mapping_profiles.id"), nullable=True
+    )
+    previous_import_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("property_imports.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    import_mode: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(320), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_version: Mapped[str] = mapped_column(String(120), nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    acquisition_mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    authorization_basis: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    effective_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    raw_payload_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    normalized_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rejected_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    removed_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+
+
+class PropertyImportError(Base):
+    __tablename__ = "property_import_errors"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    property_import_id: Mapped[str] = mapped_column(
+        ForeignKey("property_imports.id"), index=True, nullable=False
+    )
+    row_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PropertySourceRow(Base):
+    __tablename__ = "property_source_rows"
+    __table_args__ = (
+        UniqueConstraint("property_import_id", "row_number", name="uq_property_source_import_row"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    property_import_id: Mapped[str] = mapped_column(
+        ForeignKey("property_imports.id"), index=True, nullable=False
+    )
+    provider_id: Mapped[str] = mapped_column(ForeignKey("providers.id"), index=True, nullable=False)
+    row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_parcel_id: Mapped[Optional[str]] = mapped_column(String(160), index=True, nullable=True)
+    row_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    raw_payload: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_fields: Mapped[Optional[dict[str, Any]]] = mapped_column(JsonType, nullable=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    error_code: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Parcel(Base):
+    __tablename__ = "parcels"
+    __table_args__ = (
+        UniqueConstraint("provider_id", "parcel_id", name="uq_parcel_provider_parcel_id"),
+        Index("ix_parcels_address_search", "provider_id", "normalized_address"),
+        Index("ix_parcels_street_search", "provider_id", "street_name", "house_number"),
+        Index("ix_parcels_municipality_zip", "provider_id", "municipality", "postal_code"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    provider_id: Mapped[str] = mapped_column(ForeignKey("providers.id"), index=True, nullable=False)
+    parcel_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    current_import_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("property_imports.id"), nullable=True
+    )
+    current_source_row_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("property_source_rows.id"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    source_version: Mapped[str] = mapped_column(String(120), nullable=False)
+    effective_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    situs_original: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_address: Mapped[str] = mapped_column(Text, nullable=False)
+    address_precision: Mapped[str] = mapped_column(String(40), nullable=False)
+    house_number: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    street_prefix: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    street_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    street_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    street_suffix: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    unit: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    municipality: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    postal_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    county: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    geometry_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JsonType, nullable=True)
+    grid: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    property_use_code: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    property_use_category: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    owner_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    mailing_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    year_built: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    effective_year_built: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    building_area: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    living_area: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    number_of_buildings: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    number_of_units: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    stories: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    master_parcel_id: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
+    data_quality: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class ParcelAddressAlias(Base):
+    __tablename__ = "parcel_address_aliases"
+    __table_args__ = (
+        UniqueConstraint(
+            "parcel_id", "normalized_address", "alias_type", name="uq_parcel_address_alias"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    parcel_id: Mapped[str] = mapped_column(ForeignKey("parcels.id"), index=True, nullable=False)
+    property_import_id: Mapped[str] = mapped_column(
+        ForeignKey("property_imports.id"), index=True, nullable=False
+    )
+    alias_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    original_value: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_address: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PropertyBuilding(Base):
+    __tablename__ = "property_buildings"
+    __table_args__ = (
+        UniqueConstraint("parcel_id", "building_key", name="uq_property_building_parcel_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    parcel_id: Mapped[str] = mapped_column(ForeignKey("parcels.id"), index=True, nullable=False)
+    property_import_id: Mapped[str] = mapped_column(
+        ForeignKey("property_imports.id"), index=True, nullable=False
+    )
+    building_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    unit_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    stories: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    building_area: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    footprint_json: Mapped[Optional[dict[str, Any]]] = mapped_column(JsonType, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PropertyFieldValue(Base):
+    __tablename__ = "property_field_values"
+    __table_args__ = (
+        UniqueConstraint(
+            "property_import_id", "parcel_id", "field_name", name="uq_property_field_import_parcel"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    property_import_id: Mapped[str] = mapped_column(
+        ForeignKey("property_imports.id"), index=True, nullable=False
+    )
+    parcel_id: Mapped[str] = mapped_column(ForeignKey("parcels.id"), index=True, nullable=False)
+    source_row_id: Mapped[str] = mapped_column(
+        ForeignKey("property_source_rows.id"), nullable=False
+    )
+    field_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    raw_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    normalized_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    transformation: Mapped[str] = mapped_column(String(120), nullable=False)
+    transformation_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    available_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class IncidentPropertyMatchRun(Base):
+    __tablename__ = "incident_property_match_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    property_provider_id: Mapped[str] = mapped_column(
+        ForeignKey("providers.id"), index=True, nullable=False
+    )
+    property_import_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("property_imports.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    matcher_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    address_normalization_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    candidate_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    abstention_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_observation_ids: Mapped[list[str]] = mapped_column(
+        JsonType, nullable=False, default=list
+    )
+    created_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class IncidentPropertyCandidate(Base):
+    __tablename__ = "incident_property_candidates"
+    __table_args__ = (
+        UniqueConstraint("match_run_id", "parcel_id", name="uq_property_candidate_run_parcel"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    match_run_id: Mapped[str] = mapped_column(
+        ForeignKey("incident_property_match_runs.id"), index=True, nullable=False
+    )
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    parcel_id: Mapped[str] = mapped_column(ForeignKey("parcels.id"), index=True, nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    match_score: Mapped[float] = mapped_column(Float, nullable=False)
+    score_margin: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    classification: Mapped[str] = mapped_column(String(24), nullable=False)
+    recommendation_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    is_abstained: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    supporting_evidence: Mapped[list[dict[str, Any]]] = mapped_column(
+        JsonType, nullable=False, default=list
+    )
+    contradictory_evidence: Mapped[list[dict[str, Any]]] = mapped_column(
+        JsonType, nullable=False, default=list
+    )
+    features: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    explanation: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    property_data_quality: Mapped[dict[str, Any]] = mapped_column(
+        JsonType, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PropertyMatchFeature(Base):
+    __tablename__ = "property_match_features"
+    __table_args__ = (
+        UniqueConstraint("candidate_id", "feature_name", name="uq_property_match_feature_name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    candidate_id: Mapped[str] = mapped_column(
+        ForeignKey("incident_property_candidates.id"), index=True, nullable=False
+    )
+    feature_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    numeric_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    text_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    contribution: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    available_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    feature_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PropertyMatchDecision(Base):
+    __tablename__ = "property_match_decisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    candidate_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("incident_property_candidates.id"), nullable=True
+    )
+    parcel_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("parcels.id"), index=True, nullable=True
+    )
+    match_run_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("incident_property_match_runs.id"), nullable=True
+    )
+    decision: Mapped[str] = mapped_column(String(24), nullable=False)
+    corrected_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
