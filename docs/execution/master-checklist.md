@@ -118,6 +118,18 @@
 - [ ] Email, SMS, phone, consumer outreach, external notification providers, and production identity/MFA remain prohibited or later-gated.
 - [ ] PostgreSQL/PostGIS and Redis integration execution: Docker/Colima unavailable in this environment.
 
+## Phase 8 — Outcomes and analytics
+
+- [x] Append-only structured reviewer labels and internal funnel/outcome events with controlled taxonomies, provenance, idempotency, and audit records.
+- [x] Reproducible as-of evaluation manifests retain incident, score-run, label, outcome-event, and source acquisition-mode references.
+- [x] Persisted metrics cover funnel counts, property-match accuracy, precision at K, alert usefulness, found-first rate, reviewer agreement, and error taxonomy with explicit denominators and warnings.
+- [x] Technical accuracy remains separate from conversion; synthetic fixtures and missing/small samples are visibly warned and cannot support a real-world accuracy claim.
+- [x] Model Lab baseline is a blocked readiness contract only; no learned model is trained or deployed before Phase 9 evidence gates.
+- [x] Authenticated Outcomes/Analytics workspace view displays manifests, source posture, warnings, and readiness boundaries.
+- [x] Focused outcome/report tests, full formatting/lint/type/unit/build verification, migration round-trip, and isolated API smoke are recorded in the Phase 8 handoff.
+- [x] Independent Luna review completed; critical/high findings addressed. Final Phase 8 review recorded with 0 Critical and 0 High findings.
+- [ ] Official Sarasota outcome/property-source evidence, real held-out labels, calibration, PostgreSQL/PostGIS/Redis execution, and production identity remain external or later gates.
+
 ## Phase gate rule
 
-Phase 8 must not start until the Phase 7 handoff is accepted. Live Sarasota polling, official property automation, empirical calibration, Boca, Broadcastify, outreach, production dashboard deployment, and later phases remain separately gated by their requirements.
+Phase 9 must not start until the Phase 8 handoff is accepted. Live Sarasota polling, official property automation, empirical calibration, Boca, Broadcastify, outreach, production dashboard deployment, learned-model deployment, and later phases remain separately gated by their requirements.

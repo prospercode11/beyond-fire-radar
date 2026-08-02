@@ -62,8 +62,17 @@ This ledger records executable evidence for the autonomous v1 objective. Synthet
 - Governance: only explicitly authorized manual Sarasota dispatch retrievals with eligible score/property evidence may create an operational internal alert. Synthetic fixtures, unauthorized data, live polling, and suppressed/revoked records cannot create or deliver alerts. No email, SMS, phone, consumer outreach, or external notification integration exists.
 - Evidence: migrations `0012_internal_workflow` and `0013_workflow_state_guards`, repository verification (41 tests), focused workflow tests, fresh migration/API smoke, authenticated browser workflow inspection, updated source/data/execution documents, and independent Luna review with all critical/high findings fixed.
 - Limitation: no real approved Sarasota dispatch snapshot, production identity/MFA, PostgreSQL/PostGIS/Redis execution, or empirical outcome evidence is available; ordinary local fixtures correctly generate zero operational alerts.
-- Commit: pending in the current verified worktree.
+- Commit: `fd660d5` (`Complete Phase 7 internal workflow`).
+
+## Phase 8 — Outcomes and analytics
+
+- Status: complete for the internal/local analytics gate.
+- Scope: append-only structured labels, manual funnel/outcome events, property-match and ranking evaluation contracts, alert usefulness, found-first, reviewer agreement, error taxonomy, reproducible manifests, and blocked Model Lab readiness only.
+- Governance: labels/events are internal manual reviewer records, not external source approval or legal evidence. Metrics persist denominators and warnings, synthetic fixtures remain non-real-world evidence, accuracy and conversion remain separate, and no learned model is trained.
+- Evidence: migrations `0014_outcomes_analytics` through `0016_outcome_alert_provenance`, repository verification, focused label/event/report tests, fresh migration round-trip, isolated API smoke, authenticated Outcomes/Analytics view build, updated source/data/architecture/execution documents, and final Luna review.
+- Limitation: no approved real outcome dataset, real held-out labels, calibration, production identity/MFA, PostgreSQL/PostGIS/Redis execution, or external source approval is available; Model Lab readiness is intentionally blocked.
+- Commit: `325d0eb` (`Complete Phase 8 outcomes analytics`).
 
 ## Remaining phases
 
-Phases 8–10 remain pending and must advance sequentially only after each preceding acceptance gate passes. Consumer outreach, legal conclusions, invented approvals, and unvalidated model accuracy remain prohibited.
+Phases 9–10 remain pending and must advance sequentially only after each preceding acceptance gate passes. Consumer outreach, legal conclusions, invented approvals, and unvalidated model accuracy remain prohibited.

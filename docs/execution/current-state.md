@@ -1,7 +1,7 @@
 # Current state
 
-Updated: 2026-08-01 after Phase 7 verification
-Scope: Phase 0 through Phase 7 only
+Updated: 2026-08-01 after Phase 8 verification
+Scope: Phase 0 through Phase 8 only
 
 ## Implemented
 
@@ -40,10 +40,13 @@ Scope: Phase 0 through Phase 7 only
 - Phase 7 migrations `0012_internal_workflow` and `0013_workflow_state_guards` add internal alerts, in-app notification jobs, terminal-safe escalation, assignment history, append-only notes, and internal existing-client CSV import rows with idempotency, provenance, suppression, and audit controls.
 - Phase 7 workflow APIs provide deduplicated alert generation, suppression precedence, acknowledgment/snooze/resolve/revoke/escalation controls, eligibility-checked unsuppress, in-app-only notification dispatch, incident assignment, notes, and client-roster import. Fixture and unauthorized/live score evidence cannot create operational alerts.
 - Phase 7 focused workflow tests, fresh migration/API smoke verification, and the independent Luna review are recorded in the Phase 7 execution/review/handoff documents.
+- Phase 8 migrations `0014_outcomes_analytics` through `0016_outcome_alert_provenance` add append-only internal outcome labels/events, reviewed-prediction and alert bindings, dispatch/property source provenance, reproducible evaluation manifests, persisted metric rows, and Model Lab readiness state without training a learned model.
+- Phase 8 authenticated APIs enforce label taxonomy, negative-label error categories, explicit idempotent replay, future-event rejection, manifest-bound as-of filters, dispatch/property source provenance, denominators, and small-sample/synthetic warnings. Reports keep technical accuracy separate from conversion and set `accuracy_claim_allowed=false`.
+- Phase 8 Outcomes/Analytics workspace view displays saved manifests, dispatch/property source counts, metric denominators/warnings, and blocked Model Lab readiness. No probability, legal approval, damage, coverage, claim-validity, or outreach conclusion is shown.
 
 ## Explicitly not implemented
 
-Live Sarasota polling, cross-source deduplication, GIS/permit imports, empirical calibration, outcome capture, live GIS/map data, model lab, production dashboard deployment, email/SMS/phone notifications, and consumer outreach.
+Live Sarasota polling, cross-source deduplication, GIS/permit imports, empirical calibration, learned-model training/deployment, live GIS/map data, production dashboard deployment, email/SMS/phone notifications, and consumer outreach.
 
 ## Environment evidence
 
@@ -53,4 +56,4 @@ The external-source approval gate remains intact. Dispatch processing accepts on
 
 ## Next controlled step
 
-Phase 8 — outcomes and analytics — is the next controlled step. It must preserve the Phase 7 evidence/provenance boundaries and must not add live polling, property automation, empirical model claims, or consumer outreach. Keep live Sarasota polling, official property automation, and production dashboard deployment disabled until their external evidence gates are closed.
+Phase 9 — learned models — is the next controlled step. Phase 8 is complete only for the internal/local analytics gate; reports remain directional and Model Lab readiness is blocked. Phase 9 must preserve the Phase 8 manifest, label, provenance, leakage, calibration, and approval boundaries. Keep live Sarasota polling, official property automation, production dashboard deployment, empirical model claims, and consumer outreach disabled until their external evidence gates are closed.

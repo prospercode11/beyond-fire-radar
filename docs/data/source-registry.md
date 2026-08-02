@@ -20,3 +20,5 @@ Phase 5 scoring preserves the same provenance boundary. A score may be computed 
 Phase 6 adds no external provider. The dashboard reads governed incident/retrieval/property/score APIs, labels Sarasota County manual snapshots, shows live polling as disabled, and presents safe empty states when no approved record is available. Its incident-map surface has no live GIS feed and must not be read as geospatial evidence.
 
 Phase 7 adds only the internal client-roster workflow source. Client CSV rows are manually supplied internal reference data, not external-source approval evidence. Internal alert delivery is in-app only; email, SMS, phone, and consumer outreach channels are disabled and unimplemented.
+
+Phase 8 adds no external provider. Human outcome labels and funnel events are internal manual reviewer records with identity, timestamp, rationale, idempotency, and audit provenance. Evaluation manifests retain the dispatch acquisition modes used by their cases; synthetic fixtures remain pipeline evidence only, and the `sarasota.outcomes` external row remains unimplemented.

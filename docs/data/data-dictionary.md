@@ -1,8 +1,8 @@
 # Data dictionary
 
-## Phase 1 through Phase 7 tables
+## Phase 1 through Phase 8 tables
 
-Phase 6 adds no database tables or source fields. The dashboard reads governed APIs and must not create inferred records, map points, property candidates, or score facts in the browser. Phase 7 adds internal workflow tables; these are not external-source evidence and do not enable consumer outreach.
+Phase 6 adds no database tables or source fields. The dashboard reads governed APIs and must not create inferred records, map points, property candidates, or score facts in the browser. Phases 7 and 8 add internal workflow/outcome tables; these are not external-source evidence and do not enable consumer outreach.
 
 | Table | Purpose | Provenance/audit rule |
 | --- | --- | --- |
@@ -52,6 +52,10 @@ Phase 6 adds no database tables or source fields. The dashboard reads governed A
 | `workflow_notes` | Append-only internal incident review notes | Incident, note body/type, author, and timestamp; edits/deletes are not exposed |
 | `client_imports` | Internal existing-client roster import envelope | Idempotency/content hash, raw payload reference, counts, creator, and timestamp; manually supplied internal data only |
 | `existing_client_records` | Immutable row-level internal client reference data | Import/row, client key, normalized address/parcel, do-not-contact flag, source note, raw row, and timestamp |
+| `outcome_labels` | Append-only reviewer labels for relevance, classification, property match, alert usefulness, and client status | Incident/optional score run, optional reviewed alert, property prediction/match/candidate/decision bindings where applicable, versioned label type/value, approved error category, rationale, manual provenance, explicit idempotency key, reviewer, and timestamp; labels are not source approval or legal conclusions |
+| `incident_outcome_events` | Append-only internal funnel/outcome events | Incident/optional score run, controlled event type, occurred/created times, manual source, details/provenance, idempotency key, actor, and audit event; no outreach is inferred |
+| `evaluation_manifests` | Reproducible as-of input set for an analytics report | Immutable incident, score-run, label, outcome-event, dispatch retrieval, property import, acquisition-mode, provider, authorization, snapshot/content hash, filter, claim-status, creator, and timestamp references |
+| `analytics_metrics` | Persisted metric outputs for one evaluation manifest | Versioned metric name, numerator/denominator/value/status, warning, calculation details, manifest, and timestamp; prior reports are not overwritten |
 | `feature_flags` | Controlled activation boundary | Legally gated or incomplete integrations default off |
 | `legal_approvals` | Approval evidence | Approval status and notes retained |
 
@@ -64,3 +68,5 @@ Phase 5 scoring is a versioned expert-prior evidence ranking only. `provisional_
 Phase 3 linkage is an explainable weighted baseline, not machine learning. A possible match is kept separate pending human review; no fuzzy-only merge is permitted. Incident classification remains source-faithful and does not infer a working fire from an unverified signal.
 
 Phase 6 UI state is not domain evidence. Loading, API-unavailable, empty, freshness, manual-source, uncertainty, and human-review labels are presentation states and must remain consistent with the underlying API provenance and authorization posture.
+
+Phase 8 labels/events are internal manual outcomes, not external source facts. Accuracy and conversion metrics use explicit denominators and warnings; synthetic acquisition modes make reports non-real-world evidence. A manifest fixes the IDs and as-of boundary used by its metric rows. Model Lab readiness is a blocked contract until real held-out labels, leakage checks, calibration, error analysis, and administrator approval are available.

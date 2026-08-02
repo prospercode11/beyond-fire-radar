@@ -541,3 +541,110 @@ class NotificationJobResponse(BaseModel):
     last_attempt_at: Optional[datetime]
     error_message: Optional[str]
     created_at: datetime
+
+
+class OutcomeLabelCreateRequest(BaseModel):
+    score_run_id: Optional[str] = None
+    property_match_run_id: Optional[str] = None
+    property_candidate_id: Optional[str] = None
+    property_decision_id: Optional[str] = None
+    alert_id: Optional[str] = None
+    label_type: str = Field(min_length=2, max_length=48)
+    label_value: str = Field(min_length=1, max_length=64)
+    error_category: Optional[str] = Field(default=None, max_length=48)
+    rationale: str = Field(min_length=3, max_length=2000)
+    idempotency_key: Optional[str] = Field(default=None, max_length=320)
+
+
+class OutcomeLabelResponse(BaseModel):
+    id: str
+    incident_id: str
+    score_run_id: Optional[str]
+    property_match_run_id: Optional[str]
+    property_candidate_id: Optional[str]
+    property_decision_id: Optional[str]
+    alert_id: Optional[str]
+    label_type: str
+    label_value: str
+    taxonomy_version: str
+    error_category: Optional[str]
+    rationale: str
+    provenance: Dict[str, Any]
+    idempotency_key: str
+    reviewer_user_id: str
+    created_at: datetime
+
+
+class IncidentOutcomeEventCreateRequest(BaseModel):
+    score_run_id: Optional[str] = None
+    event_type: str = Field(min_length=2, max_length=48)
+    occurred_at: datetime
+    details: Dict[str, Any] = Field(default_factory=dict)
+    idempotency_key: Optional[str] = Field(default=None, max_length=320)
+
+
+class IncidentOutcomeEventResponse(BaseModel):
+    id: str
+    incident_id: str
+    score_run_id: Optional[str]
+    event_type: str
+    taxonomy_version: str
+    occurred_at: datetime
+    source: str
+    details: Dict[str, Any]
+    idempotency_key: str
+    actor_user_id: str
+    created_at: datetime
+
+
+class IncidentOutcomeResponse(BaseModel):
+    incident_id: str
+    labels: List[OutcomeLabelResponse]
+    events: List[IncidentOutcomeEventResponse]
+
+
+class AnalyticsReportRequest(BaseModel):
+    metrics: List[str] = Field(default_factory=list)
+    as_of: Optional[datetime] = None
+    top_k: int = Field(default=10, ge=1, le=500)
+
+
+class AnalyticsMetricResponse(BaseModel):
+    id: str
+    manifest_id: str
+    metric_name: str
+    metric_version: str
+    numerator: Optional[float]
+    denominator: int
+    value: Optional[float]
+    status: str
+    warning: Optional[str]
+    details: Dict[str, Any]
+    created_at: datetime
+
+
+class EvaluationManifestResponse(BaseModel):
+    id: str
+    manifest_type: str
+    manifest_version: str
+    as_of: datetime
+    filters: Dict[str, Any]
+    incident_ids: List[str]
+    score_run_ids: List[str]
+    label_ids: List[str]
+    outcome_event_ids: List[str]
+    source_acquisition_modes: List[str]
+    source_retrieval_ids: List[str]
+    source_property_import_ids: List[str]
+    source_provider_ids: List[str]
+    source_authorization_bases: List[str]
+    source_snapshot_hashes: List[str]
+    source_provenance: Dict[str, Any]
+    claim_status: str
+    created_by: str
+    created_at: datetime
+
+
+class AnalyticsReportResponse(BaseModel):
+    manifest: EvaluationManifestResponse
+    metrics: List[AnalyticsMetricResponse]

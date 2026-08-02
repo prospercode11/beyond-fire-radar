@@ -1244,3 +1244,133 @@ class ExistingClientRecord(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class OutcomeLabel(Base):
+    __tablename__ = "outcome_labels"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_outcome_label_idempotency"),
+        Index("ix_outcome_labels_incident_type", "incident_id", "label_type", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    score_run_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("opportunity_score_runs.id"), index=True, nullable=True
+    )
+    property_match_run_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("incident_property_match_runs.id"), index=True, nullable=True
+    )
+    property_candidate_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("incident_property_candidates.id"), index=True, nullable=True
+    )
+    property_decision_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("property_match_decisions.id"), index=True, nullable=True
+    )
+    alert_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("internal_alerts.id"), index=True, nullable=True
+    )
+    label_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    label_value: Mapped[str] = mapped_column(String(64), nullable=False)
+    taxonomy_version: Mapped[str] = mapped_column(
+        String(48), nullable=False, default="outcomes-taxonomy.v1"
+    )
+    error_category: Mapped[Optional[str]] = mapped_column(String(48), nullable=True)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    provenance: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    idempotency_key: Mapped[str] = mapped_column(String(320), nullable=False)
+    reviewer_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class IncidentOutcomeEvent(Base):
+    __tablename__ = "incident_outcome_events"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_incident_outcome_event_idempotency"),
+        Index("ix_incident_outcome_events_incident_occurred", "incident_id", "occurred_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    score_run_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("opportunity_score_runs.id"), index=True, nullable=True
+    )
+    event_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    taxonomy_version: Mapped[str] = mapped_column(
+        String(48), nullable=False, default="outcomes-taxonomy.v1"
+    )
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source: Mapped[str] = mapped_column(String(40), nullable=False, default="manual_internal")
+    details: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    idempotency_key: Mapped[str] = mapped_column(String(320), nullable=False)
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class EvaluationManifest(Base):
+    __tablename__ = "evaluation_manifests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    manifest_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    manifest_version: Mapped[str] = mapped_column(String(48), nullable=False)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    filters: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    incident_ids: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    score_run_ids: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    label_ids: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    outcome_event_ids: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    source_acquisition_modes: Mapped[list[str]] = mapped_column(
+        JsonType, nullable=False, default=list
+    )
+    source_retrieval_ids: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    source_property_import_ids: Mapped[list[str]] = mapped_column(
+        JsonType, nullable=False, default=list
+    )
+    source_provider_ids: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    source_authorization_bases: Mapped[list[str]] = mapped_column(
+        JsonType, nullable=False, default=list
+    )
+    source_snapshot_hashes: Mapped[list[str]] = mapped_column(
+        JsonType, nullable=False, default=list
+    )
+    source_provenance: Mapped[dict[str, Any]] = mapped_column(
+        JsonType, nullable=False, default=dict
+    )
+    claim_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="directional_only"
+    )
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class AnalyticsMetric(Base):
+    __tablename__ = "analytics_metrics"
+    __table_args__ = (
+        UniqueConstraint("manifest_id", "metric_name", name="uq_analytics_metric_manifest_name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    manifest_id: Mapped[str] = mapped_column(
+        ForeignKey("evaluation_manifests.id"), index=True, nullable=False
+    )
+    metric_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    metric_version: Mapped[str] = mapped_column(String(48), nullable=False)
+    numerator: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    denominator: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    warning: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    details: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
