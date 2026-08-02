@@ -277,6 +277,7 @@ def test_retention_failure_leaves_pending_tombstone_for_retry(tmp_path: Path, mo
                 provider_id="provider-1",
                 retrieval_id="retrieval-1",
                 content_hash="a" * 64,
+                acquisition_mode="manual_snapshot",
                 content_type="application/json",
                 payload_reference="local://provider-1/" + "a" * 64,
                 byte_size=10,

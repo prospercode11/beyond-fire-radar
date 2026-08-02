@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     session_ttl_hours: int = Field(default=8, ge=1, le=168)
     session_idle_ttl_hours: int = Field(default=8, ge=1, le=168)
     enable_live_sarasota_dispatch_polling: bool = False
+    enable_sarasota_polling_worker: bool = False
+    sarasota_dispatch_url: str = "https://dispatchreporting.scgov.net/Events?strAgencyID=All"
+    sarasota_poll_interval_seconds: int = Field(default=900, ge=900, le=900)
+    sarasota_poll_timeout_seconds: int = Field(default=20, ge=5, le=60)
+    sarasota_live_authorization_basis: Optional[str] = None
     enable_learned_model_serving: bool = False
     bootstrap_admin_email: str = "admin@example.com"
     bootstrap_admin_password: str = "change-me-in-development"

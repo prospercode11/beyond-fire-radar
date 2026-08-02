@@ -33,7 +33,7 @@
 
 ## Phase 2 — Dispatch ingestion
 
-- [x] Sarasota provider remains fail-closed for live polling.
+- [x] Sarasota provider remains fail-closed for live polling without the required runtime approval basis; local development activation is separately guarded.
 - [x] Authorized manual snapshot upload boundary with size and attestation checks.
 - [x] CSV, HTML, and JSON parser contract with versioned schema metadata.
 - [x] Immutable raw snapshot storage and raw-row preservation.
@@ -165,4 +165,4 @@
 
 ## Phase gate rule
 
-Phase 10 is complete for local/staging hardening only. Live Sarasota polling, official property automation, empirical calibration, Boca, Broadcastify, outreach, managed production activation, learned-model deployment, and any later product work remain separately gated by their requirements.
+Phase 10 is complete for local/staging hardening only. A separate local-development Sarasota polling runtime activation is recorded in `docs/handoffs/sarasota-live-polling-activation.md`; it uses explicit operator permission, a 15-minute scheduler, a database lease, and retained `live_poll` provenance. Production/staging polling still requires a persisted approved `LegalApproval`. Official property automation, empirical calibration, Boca, Broadcastify, outreach, managed production activation, learned-model deployment, and any later product work remain separately gated by their requirements.

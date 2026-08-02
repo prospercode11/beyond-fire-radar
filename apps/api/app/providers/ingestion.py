@@ -179,15 +179,37 @@ class DispatchIngestionService:
         idempotency_key: str,
         authorized_snapshot: bool,
         request_id: str,
+        acquisition_mode: str = "manual_snapshot",
+        authorization_basis: Optional[str] = None,
     ) -> IngestionReport:
         if len(payload) > self.settings.max_snapshot_bytes:
             raise SnapshotTooLarge(
                 f"snapshot exceeds the configured {self.settings.max_snapshot_bytes} byte limit"
             )
-        if provider.id == "sarasota.official_dispatch" and not authorized_snapshot:
-            raise PermissionError(
-                "manual Sarasota snapshots require an explicit authorized_snapshot attestation"
+        if acquisition_mode not in {"manual_snapshot", "synthetic_fixture", "live_poll"}:
+            raise ValueError(f"unsupported acquisition mode: {acquisition_mode}")
+        if provider.id == "sarasota.official_dispatch":
+            if acquisition_mode == "manual_snapshot" and not authorized_snapshot:
+                raise PermissionError(
+                    "manual Sarasota snapshots require an explicit authorized_snapshot attestation"
+                )
+            if acquisition_mode == "live_poll":
+                if not self.settings.enable_live_sarasota_dispatch_polling:
+                    raise PermissionError("live Sarasota polling is disabled by configuration")
+                if not authorization_basis:
+                    raise PermissionError(
+                        "live Sarasota polling requires an approval or explicit local authorization basis"
+                    )
+        elif acquisition_mode == "live_poll":
+            raise ValueError(
+                "live polling is only supported for the official Sarasota dispatch provider"
             )
+
+        storage_acquisition_mode = (
+            "synthetic_fixture"
+            if provider.id == "fixture.sarasota.dispatch" and acquisition_mode == "manual_snapshot"
+            else acquisition_mode
+        )
 
         content_hash = hashlib.sha256(payload).hexdigest()
         request_hash = content_hash
@@ -233,6 +255,7 @@ class DispatchIngestionService:
             select(RawSnapshot).where(
                 RawSnapshot.provider_id == provider.id,
                 RawSnapshot.content_hash == content_hash,
+                RawSnapshot.acquisition_mode == storage_acquisition_mode,
             )
         )
         if existing_snapshot is not None:
@@ -264,13 +287,13 @@ class DispatchIngestionService:
             schema_version=SCHEMA_VERSION,
             parser_version=PARSER_VERSION,
             circuit_state="closed",
-            acquisition_mode=(
-                "synthetic_fixture"
-                if provider.id == "fixture.sarasota.dispatch"
-                else "manual_snapshot"
-            ),
+            acquisition_mode=storage_acquisition_mode,
             authorization_basis=(
-                "fixture" if provider.id == "fixture.sarasota.dispatch" else "manual_attestation"
+                "fixture"
+                if provider.id == "fixture.sarasota.dispatch"
+                and acquisition_mode == "manual_snapshot"
+                else authorization_basis
+                or ("manual_attestation" if acquisition_mode == "manual_snapshot" else None)
             ),
         )
         db.add(retrieval)
@@ -280,6 +303,7 @@ class DispatchIngestionService:
             provider_id=provider.id,
             retrieval_id=retrieval.id,
             content_hash=content_hash,
+            acquisition_mode=storage_acquisition_mode,
             content_type=content_type or "application/octet-stream",
             payload_reference=raw_reference,
             byte_size=len(payload),
@@ -291,7 +315,10 @@ class DispatchIngestionService:
         except IntegrityError:
             db.rollback()
             existing_snapshot = db.scalar(
-                select(RawSnapshot).where(RawSnapshot.content_hash == content_hash)
+                select(RawSnapshot)
+                .where(RawSnapshot.content_hash == content_hash)
+                .where(RawSnapshot.provider_id == provider.id)
+                .where(RawSnapshot.acquisition_mode == storage_acquisition_mode)
             )
             if existing_snapshot is None:
                 raise
@@ -368,6 +395,8 @@ class DispatchIngestionService:
                     ]
                 ),
                 "authorized_snapshot_attestation": authorized_snapshot,
+                "acquisition_mode": retrieval.acquisition_mode,
+                "authorization_basis": retrieval.authorization_basis,
             },
         )
         db.commit()

@@ -11,6 +11,8 @@ def test_health_explicitly_reports_phase_and_live_polling_state(client: TestClie
         "service": "Beyond Fire Radar",
         "environment": "development",
         "live_polling_enabled": False,
+        "live_polling_worker_enabled": False,
+        "live_polling_interval_seconds": 900,
         "learned_model_serving_enabled": False,
         "phase": "10-production-hardening",
     }

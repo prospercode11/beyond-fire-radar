@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.config import get_settings
+from app.config import Settings
 from app.providers.registry import ProviderDisabledError, SarasotaDispatchProvider, build_registry
 from fastapi.testclient import TestClient
 
@@ -16,8 +16,8 @@ def test_provider_registry_exposes_fixture_and_disabled_live_provider(client: Te
     assert providers["sarasota.official_dispatch"]["enabled"] is False
 
 
-def test_live_provider_fails_closed() -> None:
-    settings = get_settings()
+def test_live_provider_fails_closed_when_flag_false() -> None:
+    settings = Settings(enable_live_sarasota_dispatch_polling=False)
     registry = build_registry(settings)
     provider = registry.get("sarasota.official_dispatch")
     assert isinstance(provider, SarasotaDispatchProvider)

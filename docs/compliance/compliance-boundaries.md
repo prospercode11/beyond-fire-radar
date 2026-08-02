@@ -17,7 +17,7 @@ Beyond Fire Radar is an internal research and review tool. It is not a consumer-
 - Record human review labels, suppressions, existing-client status, do-not-contact status, and legal approvals.
 - Keep research-only organizational relationships with source, date, verification status, confidence, legal-use category, and last-verified date once those records are added.
 - Phase 2 manual snapshot ingestion requires an explicit authorization attestation and retains the raw source bytes for review. Phase 3 processing labels those retrievals `manual_snapshot` and does not treat that label as a legal approval.
-- Incident processing rejects `live_poll` acquisition while the Sarasota live-polling flag is disabled. The external-source approval gate remains in place; accepting already supplied manual/fixture data is a narrow workflow distinction, not a bypass.
+- Incident processing accepts `live_poll` only when the Sarasota runtime approval decision passes. Local development may use the exact operator basis `explicit_user_permission`; this is not a legal approval. Production/staging require a persisted approved `LegalApproval`. Manual/fixture processing remains available, and the external-source approval gate is not bypassed.
 
 ## Future outreach gate
 

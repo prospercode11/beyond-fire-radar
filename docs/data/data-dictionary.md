@@ -13,8 +13,9 @@ Phase 6 adds no database tables or source fields. The dashboard reads governed A
 | `audit_chain_heads` | Current tamper-evident audit-chain head | Single chain sequence/hash updated with each event; mismatch blocks trust in the audit stream |
 | `providers` | Provider contract and authority metadata | Limitations and authorized-use status are explicit |
 | `provider_retrievals` | One snapshot retrieval/import attempt | Hash, parser/schema versions, counts, failure/circuit state, retrieval/effective time, acquisition mode, authorization basis |
-| `raw_snapshots` | Content-addressed raw payload reference | Unique retrieval and content hash; never overwrite; retention may mark `payload_purge_pending_at` before deletion and tombstone bytes with `payload_purged_at` while retaining provenance |
+| `raw_snapshots` | Content-addressed raw payload reference | Provider/content-hash/acquisition-mode scoped replay identity; never overwrite; retention may mark `payload_purge_pending_at` before deletion and tombstone bytes with `payload_purged_at` while retaining provenance |
 | `provider_health` | Current operational health summary | Last status, failure count, circuit state, and schema-alert count |
+| `provider_poll_leases` | Database-backed Sarasota scheduler lease and latest cycle state | One provider-scoped lease prevents overlapping workers; owner, expiry, start/finish, status, and bounded error are retained |
 | `import_jobs` | Idempotent manual/import job envelope | Provider-scoped key, request hash, retrieval reference, and creator |
 | `parser_versions` | Registered parser/schema contract | Provider, active version, expected fields, required fields |
 | `schema_alerts` | Persisted schema drift and zero-row alerts | Retrieval, severity, observed/missing/unexpected fields, message |
@@ -75,7 +76,9 @@ Phase 5 scoring is a versioned expert-prior evidence ranking only. `provisional_
 
 Phase 3 linkage is an explainable weighted baseline, not machine learning. A possible match is kept separate pending human review; no fuzzy-only merge is permitted. Incident classification remains source-faithful and does not infer a working fire from an unverified signal.
 
-Phase 6 UI state is not domain evidence. Loading, API-unavailable, empty, freshness, manual-source, uncertainty, and human-review labels are presentation states and must remain consistent with the underlying API provenance and authorization posture.
+Phase 6 UI state is not domain evidence. Loading, API-unavailable, empty, freshness, live/manual-source, uncertainty, and human-review labels are presentation states and must remain consistent with the underlying API provenance and authorization posture. The dashboard reads the API health contract for the Sarasota polling flag, worker flag, and exact interval rather than assuming a static status.
+
+Live polling is a separately controlled acquisition mode. Local development may record `authorization_basis=explicit_user_permission` only when the feature flag and worker are enabled; this basis is an operator authorization for the local prototype, not a legal approval. Production/staging require a persisted approved `LegalApproval`. Every live retrieval and processing run retains `live_poll`, provider, raw snapshot, content hash, parser/schema versions, authorization basis, and audit references.
 
 Phase 8 labels/events are internal manual outcomes, not external source facts. Accuracy and conversion metrics use explicit denominators and warnings; synthetic acquisition modes make reports non-real-world evidence. A manifest fixes the IDs and as-of boundary used by its metric rows. Model Lab readiness is a blocked contract until real held-out labels, leakage checks, calibration, error analysis, and administrator approval are available.
 

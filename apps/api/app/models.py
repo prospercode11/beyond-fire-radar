@@ -159,13 +159,22 @@ class ProviderRetrieval(Base):
 
 class RawSnapshot(Base):
     __tablename__ = "raw_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider_id",
+            "content_hash",
+            "acquisition_mode",
+            name="uq_raw_snapshots_provider_hash_mode",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     provider_id: Mapped[str] = mapped_column(ForeignKey("providers.id"), index=True, nullable=False)
     retrieval_id: Mapped[str] = mapped_column(
         ForeignKey("provider_retrievals.id"), unique=True, nullable=False
     )
-    content_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    acquisition_mode: Mapped[str] = mapped_column(String(32), nullable=False)
     content_type: Mapped[str] = mapped_column(String(100), nullable=False)
     payload_reference: Mapped[str] = mapped_column(Text, nullable=False)
     byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -239,6 +248,27 @@ class ProviderHealth(Base):
     last_retrieval_status: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     schema_alert_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     known_status_note: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class ProviderPollLease(Base):
+    __tablename__ = "provider_poll_leases"
+
+    provider_id: Mapped[str] = mapped_column(
+        ForeignKey("providers.id", ondelete="CASCADE"), primary_key=True
+    )
+    lease_owner: Mapped[str] = mapped_column(String(120), nullable=False)
+    lease_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_finished_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_status: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
 
 class ParserVersion(Base):

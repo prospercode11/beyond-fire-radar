@@ -4,6 +4,9 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
+
+import httpx
 
 from app.config import Settings
 from app.providers.base import Provider, ProviderMetadata, ProviderSnapshot
@@ -11,6 +14,12 @@ from app.providers.base import Provider, ProviderMetadata, ProviderSnapshot
 
 class ProviderDisabledError(RuntimeError):
     pass
+
+
+class SarasotaProviderError(RuntimeError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class FixtureProvider:
@@ -33,9 +42,16 @@ class FixtureProvider:
 
 
 class SarasotaDispatchProvider:
-    def __init__(self, metadata: ProviderMetadata, settings: Settings) -> None:
+    def __init__(
+        self,
+        metadata: ProviderMetadata,
+        settings: Settings,
+        *,
+        http_client: Optional[httpx.Client] = None,
+    ) -> None:
         self.metadata = metadata
         self.settings = settings
+        self.http_client = http_client
 
     def can_retrieve(self) -> bool:
         return (
@@ -43,8 +59,57 @@ class SarasotaDispatchProvider:
         )
 
     def retrieve(self) -> ProviderSnapshot:
-        raise ProviderDisabledError(
-            "live Sarasota dispatch polling is disabled until written authorization and an approved integration exist"
+        if not self.can_retrieve():
+            raise ProviderDisabledError(
+                "live Sarasota dispatch polling is disabled by configuration"
+            )
+
+        request_headers = {
+            "Accept": "text/html,application/xhtml+xml",
+            "User-Agent": "BeyondFireRadar/0.1 (Sarasota dispatch polling)",
+        }
+        try:
+            if self.http_client is not None:
+                response = self.http_client.get(
+                    self.settings.sarasota_dispatch_url,
+                    headers=request_headers,
+                    timeout=self.settings.sarasota_poll_timeout_seconds,
+                )
+            else:
+                with httpx.Client(follow_redirects=True) as client:
+                    response = client.get(
+                        self.settings.sarasota_dispatch_url,
+                        headers=request_headers,
+                        timeout=self.settings.sarasota_poll_timeout_seconds,
+                    )
+        except httpx.HTTPError as exc:
+            raise SarasotaProviderError(
+                "network_error", f"Sarasota dispatch request failed: {exc}"
+            ) from exc
+
+        if response.status_code != 200:
+            raise SarasotaProviderError(
+                "http_error",
+                f"Sarasota dispatch returned HTTP {response.status_code}; no snapshot was imported",
+            )
+        payload = response.content
+        if len(payload) > self.settings.max_snapshot_bytes:
+            raise SarasotaProviderError(
+                "snapshot_too_large",
+                f"Sarasota dispatch response exceeds the configured {self.settings.max_snapshot_bytes} byte limit",
+            )
+        if b"911 Dispatch Reporting" not in payload or b"<table" not in payload.lower():
+            raise SarasotaProviderError(
+                "unexpected_response",
+                "Sarasota dispatch response did not contain the expected reporting table",
+            )
+        content_type = response.headers.get("content-type", "text/html; charset=utf-8")
+        return ProviderSnapshot(
+            provider_id=self.metadata.provider_id,
+            content_type=content_type,
+            payload=payload,
+            retrieved_at=datetime.now(timezone.utc).isoformat(),
+            effective_at=None,
         )
 
 
@@ -101,15 +166,17 @@ def build_registry(settings: Settings) -> ProviderRegistry:
         source_authority="Sarasota County, Florida",
         geographic_coverage="Sarasota County, Florida",
         data_type="dispatch_snapshot",
-        authentication_method="to_be_confirmed",
-        authorized_use_status="authorization_required",
-        enabled_by_default=False,
-        polling_interval_seconds=None,
+        authentication_method="none_public_https_get",
+        authorized_use_status=(
+            "development_operator_authorized; recorded approval required outside development"
+        ),
+        enabled_by_default=settings.enable_live_sarasota_dispatch_polling,
+        polling_interval_seconds=settings.sarasota_poll_interval_seconds,
         schema_version="sarasota.dispatch.schema.v1",
         parser_version="sarasota.dispatch.v1",
-        license_note="Terms and authorized automated use must be confirmed before activation.",
-        limitations="CAPTCHA/access controls/rate limits must not be bypassed. Live polling is disabled; manual imports require an authorization attestation.",
-        contact_note="Written approval and source documentation required.",
+        license_note="Automated use remains subject to the source owner’s terms and the repository approval gate.",
+        limitations="Normal HTTPS GET only. CAPTCHA/access controls/rate limits must not be bypassed. Live polling is 15-minute minimum and fails closed without approval.",
+        contact_note="Production/staging require a recorded LegalApproval for live polling.",
     )
     property_fixture_metadata = ProviderMetadata(
         provider_id="fixture.sarasota.property_appraiser",

@@ -8,7 +8,7 @@ After installing Python and Node dependencies and copying `.env.example` to `.en
 PATH="$PWD/.venv/bin:$PATH" python scripts/dev.py local
 ```
 
-This runs migrations, the API on `API_HOST:API_PORT` (default `127.0.0.1:8000`), and the Next.js development server on port 3000. The first local login uses the configured development bootstrap credentials. Live Sarasota polling and learned serving stay disabled.
+This runs migrations, the API on `API_HOST:API_PORT` (default `127.0.0.1:8000`), and the Next.js development server on port 3000. The first local login uses the configured development bootstrap credentials. The checked-in example keeps live Sarasota polling disabled; the local operator activation requires both polling flags plus `SARASOTA_LIVE_AUTHORIZATION_BASIS=explicit_user_permission` and runs exactly every 900 seconds.
 
 ## Staging and production
 
@@ -22,7 +22,7 @@ Required production posture:
 - PostgreSQL/PostGIS `DATABASE_URL`, Redis `REDIS_URL`, `RATE_LIMIT_BACKEND=redis`, and `REDIS_REQUIRED_FOR_READINESS=true`;
 - HTTPS `WEB_ORIGIN` and explicit `ALLOWED_HOSTS`;
 - S3/R2 bucket, endpoint, region, access key, secret, and separate environment prefix;
-- `ENABLE_LIVE_SARASOTA_DISPATCH_POLLING=false` and `ENABLE_LEARNED_MODEL_SERVING=false`;
+- `ENABLE_LIVE_SARASOTA_DISPATCH_POLLING=false`, `ENABLE_SARASOTA_POLLING_WORKER=false`, and `ENABLE_LEARNED_MODEL_SERVING=false` by default; any staging/production polling activation also requires a persisted approved `LegalApproval` and must not use the local explicit-permission basis;
 - provisioned administrator through an approved identity/provisioning procedure, not an invented bootstrap path.
 
 ## Domain, TLS, cost, and rollback

@@ -2,7 +2,7 @@
 
 ## Health and observability
 
-- `/healthz` is a liveness response and reports environment, live-polling flag, learned-serving flag, and phase.
+- `/healthz` is a liveness response and reports environment, live-polling flag, scheduler-worker flag, exact live-polling interval, learned-serving flag, and phase.
 - `/readyz` verifies the database and, when configured, Redis. A production Redis failure returns 503.
 - `/metrics` exposes bounded Prometheus text for request counts and median/0.99 duration samples. It contains no source payloads or bearer tokens.
 - HTTP logs are one-line JSON with method, route template, status, duration, and request ID. Configure `LOG_LEVEL` and an external error tracker through `ERROR_TRACKING_DSN`; no secret or payload logging is enabled by default.
@@ -16,11 +16,11 @@
 3. If object storage is unavailable, stop imports and preserve retrieval metadata; do not retry with a different source or delete provenance.
 4. If a migration fails, stop the release, retain the previous deployment and backup, and restore only into an isolated target for diagnosis.
 5. If audit integrity fails, freeze administrative mutations, preserve the database, record the incident, and investigate the first invalid sequence before any repair.
-6. Keep Sarasota live polling and learned serving disabled during every recovery action.
+6. Keep Sarasota live polling and learned serving disabled during every recovery action unless the operator is deliberately validating the local activation documented in `docs/handoffs/sarasota-live-polling-activation.md`; never enable polling in staging/production without the persisted `LegalApproval` gate.
 
 ## Queue/worker posture
 
-Notification jobs are internal in-app jobs only. The operations endpoint exposes pending counts and oldest pending time; no consumer or external channel is configured. A future worker must claim jobs transactionally, bound retries, record errors, and emit audit events before it is enabled. Current local API behavior is synchronous and does not imply a worker SLA.
+Notification jobs are internal in-app jobs only. The operations endpoint exposes pending counts and oldest pending time; no consumer or external channel is configured. Sarasota local polling is the separate provider worker: it performs one immediate cycle at startup, then sleeps exactly 900 seconds, claims a database lease before retrieval, and records bounded success/failure/skip audit events. A future notification worker must claim jobs transactionally, bound retries, record errors, and emit audit events before it is enabled. Current local API behavior does not imply a worker SLA.
 
 ## Failure injection and recovery exercises
 

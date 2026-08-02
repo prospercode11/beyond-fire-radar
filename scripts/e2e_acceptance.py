@@ -32,8 +32,13 @@ def main() -> None:
 
     with httpx.Client(base_url=base_url, timeout=10) as client:
         health = body(client.get("/healthz"))
-        if health["live_polling_enabled"] or health["learned_model_serving_enabled"]:
-            raise RuntimeError("live polling and learned serving must remain disabled")
+        if health["learned_model_serving_enabled"]:
+            raise RuntimeError("learned serving must remain disabled")
+        if (
+            health.get("live_polling_enabled")
+            and health.get("live_polling_interval_seconds") != 900
+        ):
+            raise RuntimeError("live Sarasota polling must be configured to a 15-minute interval")
         if client.get("/api/v1/incidents").status_code != 401:
             raise RuntimeError("incident reads must require authentication")
 

@@ -35,6 +35,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("BOOTSTRAP_ADMIN_EMAIL", "admin@example.com")
     monkeypatch.setenv("BOOTSTRAP_ADMIN_PASSWORD", "development-password-123")
     monkeypatch.setenv("RAW_SNAPSHOT_DIR", str(tmp_path / "raw-snapshots"))
+    monkeypatch.setenv("ENABLE_LIVE_SARASOTA_DISPATCH_POLLING", "false")
+    monkeypatch.setenv("ENABLE_SARASOTA_POLLING_WORKER", "false")
     from app.config import get_settings
 
     get_settings.cache_clear()

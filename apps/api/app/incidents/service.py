@@ -47,6 +47,7 @@ from app.models import (
     ProviderRetrieval,
     RawSnapshot,
 )
+from app.providers.approval import live_polling_is_authorized
 from app.providers.taxonomy import (
     COMMERCIAL_STRUCTURE_FIRE,
     ELECTRICAL_STRUCTURAL_EXPOSURE,
@@ -60,7 +61,7 @@ from app.providers.taxonomy import (
     WORKING_FIRE,
 )
 
-PROCESSABLE_ACQUISITION_MODES = {"manual_snapshot", "synthetic_fixture"}
+PROCESSABLE_ACQUISITION_MODES = {"manual_snapshot", "synthetic_fixture", "live_poll"}
 STRUCTURE_FAMILIES = {
     COMMERCIAL_STRUCTURE_FIRE,
     GENERAL_STRUCTURE_FIRE,
@@ -728,16 +729,13 @@ def process_retrieval(
     reason: str = "incremental_import",
     request_id: Optional[str] = None,
 ) -> IncidentProcessingRun:
-    if (
-        retrieval.acquisition_mode == "live_poll"
-        and not settings.enable_live_sarasota_dispatch_polling
-    ):
+    if retrieval.acquisition_mode == "live_poll" and not live_polling_is_authorized(db, settings):
         raise PermissionError(
-            "live Sarasota polling is disabled; only manually supplied snapshots and fixtures may be processed"
+            "live Sarasota polling is disabled or lacks the required approval basis; manually supplied snapshots and fixtures remain available"
         )
     if retrieval.acquisition_mode not in PROCESSABLE_ACQUISITION_MODES:
         raise PermissionError(
-            "incident processing accepts manually supplied snapshots and fixtures only; live-collected data remains disabled"
+            "incident processing accepts manually supplied snapshots, fixtures, and approved live Sarasota retrievals only"
         )
     # Serialize incident assembly per provider. PostgreSQL takes a row lock; this write also
     # forces SQLite to acquire its database write lock before candidate search.

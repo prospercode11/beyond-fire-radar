@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from contextlib import asynccontextmanager
 from uuid import uuid4
@@ -25,6 +26,7 @@ from app.api.routes.providers import seed_providers
 from app.config import get_settings
 from app.db import SessionLocal
 from app.observability import configure_logging, log_request, metrics, monotonic_ms, prometheus_text
+from app.providers.polling import SarasotaPollingService, SarasotaPollingWorker
 from app.rate_limit import RateLimitExceeded, client_key, limiter
 
 settings = get_settings()
@@ -37,7 +39,24 @@ async def lifespan(_: FastAPI):
     with SessionLocal() as db:
         seed_providers(db)
         db.commit()
-    yield
+    polling_task = None
+    current_settings = get_settings()
+    if (
+        current_settings.enable_live_sarasota_dispatch_polling
+        and current_settings.enable_sarasota_polling_worker
+    ):
+        polling_task = asyncio.create_task(
+            SarasotaPollingWorker(SarasotaPollingService(current_settings)).run()
+        )
+    try:
+        yield
+    finally:
+        if polling_task is not None:
+            polling_task.cancel()
+            try:
+                await polling_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(
@@ -161,6 +180,8 @@ def healthz() -> dict[str, object]:
         "service": current_settings.app_name,
         "environment": current_settings.app_env,
         "live_polling_enabled": current_settings.enable_live_sarasota_dispatch_polling,
+        "live_polling_worker_enabled": current_settings.enable_sarasota_polling_worker,
+        "live_polling_interval_seconds": current_settings.sarasota_poll_interval_seconds,
         "learned_model_serving_enabled": current_settings.enable_learned_model_serving,
         "phase": "10-production-hardening",
     }

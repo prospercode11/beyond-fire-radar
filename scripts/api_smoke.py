@@ -18,12 +18,15 @@ def main() -> None:
     with httpx.Client(base_url=base_url, timeout=5) as client:
         health = client.get("/healthz")
         health.raise_for_status()
-        if health.json()["live_polling_enabled"]:
-            raise RuntimeError("live polling must be disabled in the foundation smoke test")
         if health.json().get("learned_model_serving_enabled"):
             raise RuntimeError(
                 "learned model serving must be disabled in the foundation smoke test"
             )
+        if (
+            health.json().get("live_polling_enabled")
+            and health.json().get("live_polling_interval_seconds") != 900
+        ):
+            raise RuntimeError("live Sarasota polling must be configured to a 15-minute interval")
 
         status = client.get("/api/v1/auth/bootstrap/status")
         status.raise_for_status()
@@ -66,7 +69,7 @@ def main() -> None:
         with snapshot_path.open("rb") as snapshot:
             upload = client.post(
                 "/api/v1/providers/fixture.sarasota.dispatch/snapshots",
-                headers={**headers, "Idempotency-Key": "api-smoke-phase2"},
+                headers={**headers, "Idempotency-Key": "api-smoke-scheduler-v1"},
                 files={"file": (snapshot_path.name, snapshot, "text/csv")},
                 data={"authorized_snapshot": "false"},
             )
@@ -94,7 +97,7 @@ def main() -> None:
         with snapshot_path.open("rb") as snapshot:
             replay = client.post(
                 "/api/v1/providers/fixture.sarasota.dispatch/snapshots",
-                headers={**headers, "Idempotency-Key": "api-smoke-phase2"},
+                headers={**headers, "Idempotency-Key": "api-smoke-scheduler-v1"},
                 files={"file": (snapshot_path.name, snapshot, "text/csv")},
                 data={"authorized_snapshot": "false"},
             )
