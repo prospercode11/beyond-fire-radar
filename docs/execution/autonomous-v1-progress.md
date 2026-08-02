@@ -71,7 +71,7 @@ This ledger records executable evidence for the autonomous v1 objective. Synthet
 - Governance: labels/events are internal manual reviewer records, not external source approval or legal evidence. Metrics persist denominators and warnings, synthetic fixtures remain non-real-world evidence, accuracy and conversion remain separate, and no learned model is trained.
 - Evidence: migrations `0014_outcomes_analytics` through `0016_outcome_alert_provenance`, repository verification, focused label/event/report tests, fresh migration round-trip, isolated API smoke, authenticated Outcomes/Analytics view build, updated source/data/architecture/execution documents, and final Luna review.
 - Limitation: no approved real outcome dataset, real held-out labels, calibration, production identity/MFA, PostgreSQL/PostGIS/Redis execution, or external source approval is available; Model Lab readiness is intentionally blocked.
-- Commit: `325d0eb` (`Complete Phase 8 outcomes analytics`).
+- Commit: `e19a400` (`Complete Phase 8 outcomes analytics`).
 
 ## Remaining phases
 
