@@ -1,0 +1,1 @@
+"""Transparent opportunity-ranking foundation."""

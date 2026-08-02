@@ -46,6 +46,20 @@
 - [x] Independent Luna review completed; critical/high findings addressed.
 - [ ] Real approved Sarasota snapshot artifact supplied and accepted for the external-source gate.
 - [ ] PostgreSQL/PostGIS and Redis integration execution: Docker/Colima unavailable in this environment.
+
+## Phase 5 — Transparent opportunity scoring
+
+- [x] Migration-owned scoring-version registry, score-run history, feature contributions/provenance, human overrides, as-of boundary, temporal incident-link intervals, and explicit predecessor rollback.
+- [x] Separately versioned source quality, incident validity, property-match quality, material-loss evidence, loss complexity, Beyond Adjusting fit, freshness, and data-sufficiency components.
+- [x] Explainable weighted-geometric provisional ranking with hard negative/contradiction/property gates, missing-data penalties, evidence tiers, and abstention.
+- [x] No arbitrary probability, calibration, insurance coverage, claim validity, or consumer-contact inference; synthetic and live/unauthorized sources are ineligible for operational alerts.
+- [x] Authenticated score/list/rescore/override/version-registration/rollback APIs with audited human decisions.
+- [x] As-of and leakage-controlled evaluation contracts; feature availability and grouped/temporal split tests.
+- [x] Adversarial tests cover weak/negative signals, missing property evidence, feature explanations, as-of boundaries, overrides, rescore, rollback, and version registration.
+- [x] Independent Luna review completed; critical/high findings addressed.
+- [x] Formatting, lint, type, unit, migration round-trip, API smoke, and isolated application/API checks recorded.
+- [x] Phase 5 handoff and execution/data/modeling/architecture documents recorded.
+- [ ] Real held-out outcomes, calibration, production alert authorization, and PostgreSQL/PostGIS/Redis integration execution remain external gates.
 - [x] Phase 2 handoff and acceptance evidence recorded.
 
 ## Phase 3 — Incident intelligence
@@ -80,4 +94,4 @@
 
 ## Phase gate rule
 
-Phase 5 must not start until the Phase 4 handoff is accepted. Live Sarasota polling, official property automation, scoring, dashboard, outreach, Boca, Broadcastify, and later phases remain separately gated by their requirements.
+Phase 6 must not start until the Phase 5 handoff is accepted. Live Sarasota polling, official property automation, empirical calibration, outcome capture, notifications, Boca, Broadcastify, outreach, and later phases remain separately gated by their requirements.

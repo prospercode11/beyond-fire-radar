@@ -41,13 +41,24 @@
 - Parcel API provenance exposes current import/source row/raw payload/field transformations/aliases/buildings; human property decisions survive reprocessing and are audited.
 - The official property source approval gate remains open; the synthetic fixture is not evidence of real-world accuracy. PostgreSQL/PostGIS/Redis execution remains unavailable in this environment.
 
+## Phase 5 gate
+
+- Fresh migration upgrade, downgrade, and re-upgrade include scoring versions, score history, feature provenance, overrides, as-of, temporal incident-link intervals, and explicit predecessor rollback.
+- Each scoring component is versioned and exposes value/status, contribution, available-at, source observations, evidence, and explanation. Missing, negative, and contradictory evidence stays visible and can hard-gate or abstain.
+- Provisional ranking is explicitly non-probabilistic and uses a versioned weighted-geometric formula. No calibration, accuracy, insurance, coverage, claim-validity, or contact claim is permitted without real held-out evidence.
+- Manual/fixture/live acquisition provenance is enforced: only explicitly authorized manual snapshots can meet the operational source gate, while synthetic and live/unauthorized sources remain ineligible for alerts and live Sarasota polling remains disabled.
+- As-of scoring excludes observations, retrievals, property runs/decisions, property source projections, incident classifications, contradictory evidence, incident-link assignments, and freshness evidence after the prediction boundary. The contract evaluator rejects group overlap and future feature availability; it reports no accuracy metric.
+- Human overrides are append-only, survive rescoring, do not mutate baseline runs, and score rollback follows an explicit predecessor with one current run per incident.
+- Adversarial/API tests cover weak/negative events, missing or ambiguous property evidence, as-of boundaries, feature contributions, release registration, overrides, rescore, and rollback.
+- Real outcome labels, calibration, production alert authorization, PostgreSQL/PostGIS/Redis execution, and later dashboard/outcome workflows remain external or later-phase gates.
+
 ## Test layers
 
 1. Unit: password/session hashing, provider contract behavior, fixture shape.
 2. Integration: migrations, auth flow, role checks, audit persistence, provider seeding.
 3. API smoke: health, one-time bootstrap, login, provider list, identity.
 4. Web build: TypeScript compilation and production Next.js build.
-5. Future end-to-end: approved snapshot import through outcome capture, only after phases 2–8 exist.
+5. Future end-to-end: approved snapshot import through review/outcome capture, only after the relevant later phases exist.
 
 ## Future model evaluation
 

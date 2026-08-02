@@ -371,3 +371,70 @@ class ParcelResponse(BaseModel):
     current_import_id: Optional[str] = None
     current_source_row_id: Optional[str] = None
     provenance: Dict[str, Any] = Field(default_factory=dict)
+
+
+class OpportunityScoreFeatureResponse(BaseModel):
+    id: str
+    feature_name: str
+    value: Optional[float]
+    status: str
+    contribution: Optional[float]
+    evidence: Dict[str, Any]
+    source_observation_ids: List[str]
+    available_at: Optional[datetime]
+    feature_version: str
+    explanation: str
+
+
+class OpportunityScoreResponse(BaseModel):
+    id: str
+    incident_id: str
+    property_match_run_id: Optional[str]
+    property_provider_id: Optional[str]
+    scoring_version: str
+    previous_score_run_id: Optional[str]
+    as_of: datetime
+    status: str
+    provisional_score: Optional[float]
+    evidence_tier: str
+    alert_eligibility: bool
+    abstention_reason: Optional[str]
+    hard_gate_status: str
+    explanation: Dict[str, Any]
+    source_observation_ids: List[str]
+    available_at: Optional[datetime]
+    created_at: datetime
+    completed_at: Optional[datetime]
+    is_current: bool
+    features: List[OpportunityScoreFeatureResponse]
+    human_override: Optional[Dict[str, Any]]
+
+
+class OpportunityScoreRequest(BaseModel):
+    property_provider_id: Optional[str] = None
+    scoring_version: Optional[str] = None
+    as_of: Optional[datetime] = None
+
+
+class OpportunityScoreOverrideRequest(BaseModel):
+    decision: Literal["suppress", "promote_review", "hold", "clear"]
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class ScoringVersionResponse(BaseModel):
+    id: str
+    version: str
+    status: str
+    component_versions: Dict[str, Any]
+    priors: Dict[str, Any]
+    rules: Dict[str, Any]
+    description: str
+    created_at: datetime
+
+
+class ScoringVersionCreateRequest(BaseModel):
+    version: str = Field(min_length=1, max_length=80)
+    component_versions: Dict[str, Any]
+    priors: Dict[str, float]
+    rules: Dict[str, Any]
+    description: str = Field(min_length=10, max_length=2000)

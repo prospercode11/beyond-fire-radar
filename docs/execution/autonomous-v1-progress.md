@@ -40,10 +40,11 @@ This ledger records executable evidence for the autonomous v1 objective. Synthet
 
 ## Phase 5 — Transparent opportunity-scoring foundation
 
-- Status: in progress.
-- Scope: versioned feature availability, source quality, incident validity, material loss/complexity/fit/data sufficiency, transparent ranking and abstention only. No arbitrary probability, insurance coverage inference, or consumer outreach.
-- Next evidence: scoring schema/migration, reproducible feature registry and evaluation harness, time-aware tests, independent Luna model-contract review, handoff, and commit.
+- Status: complete for the local/manual prototype gate.
+- Scope: versioned feature availability, temporal incident/property evidence selection, source quality, incident validity, material loss/complexity/fit/data sufficiency, transparent ranking and abstention only. No arbitrary probability, insurance coverage inference, or consumer outreach.
+- Evidence: migrations `0009_opportunity_scoring` through `0011_temporal_incident_links`, 34-test repository verification, 12 focused incident/scoring tests, fresh migration round-trip, clean-database API smoke with fixture labeling/replay, scoring contract evaluation with `accuracy_claim_allowed=false`, updated architecture/data/modeling/source/execution documents, and final Luna review with no critical/high findings.
+- Limitation: real outcome labels/calibration, official source approval/terms, production alert authorization, and PostgreSQL/PostGIS/Redis execution remain external gates. Live Sarasota polling remains disabled.
 
 ## Remaining phases
 
-Phases 5–10 remain pending and must advance sequentially only after each preceding acceptance gate passes. Consumer outreach, legal conclusions, invented approvals, and unvalidated model accuracy remain prohibited.
+Phases 6–10 remain pending and must advance sequentially only after each preceding acceptance gate passes. Consumer outreach, legal conclusions, invented approvals, and unvalidated model accuracy remain prohibited.

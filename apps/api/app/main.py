@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api.routes import admin, auth, incidents, properties, providers
+from app.api.routes import admin, auth, incidents, opportunities, properties, providers
 from app.api.routes.providers import seed_providers
 from app.config import get_settings
 from app.db import SessionLocal
@@ -59,7 +59,7 @@ def healthz() -> dict[str, object]:
         "status": "ok",
         "service": settings.app_name,
         "live_polling_enabled": settings.enable_live_sarasota_dispatch_polling,
-        "phase": "4-property-resolution",
+        "phase": "5-opportunity-scoring",
     }
 
 
@@ -79,4 +79,5 @@ app.include_router(providers.retrieval_router)
 app.include_router(incidents.router)
 app.include_router(properties.import_router)
 app.include_router(properties.match_router)
+app.include_router(opportunities.router)
 app.include_router(admin.router)

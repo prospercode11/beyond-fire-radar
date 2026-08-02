@@ -408,6 +408,7 @@ def _link_observation(
         assignment_key=observation.id,
         decision_id=decision_id,
         created_by=actor_user_id,
+        ended_at=None,
     )
     db.add(link)
     _add_aliases(db, incident, observation)
@@ -988,6 +989,7 @@ def merge_incidents(
     for link in _current_links(db, absorbed.id):
         link.is_current = False
         link.assignment_key = None
+        link.ended_at = _now()
         db.flush()
         observation = db.get(DispatchObservation, link.observation_id)
         if observation is None:
@@ -1076,6 +1078,7 @@ def split_incident(
         old_link = current[observation_id]
         old_link.is_current = False
         old_link.assignment_key = None
+        old_link.ended_at = _now()
         db.flush()
         observation = db.get(DispatchObservation, observation_id)
         assert observation is not None

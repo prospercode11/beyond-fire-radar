@@ -26,6 +26,8 @@
 | Property source misuse | Official property provider is disabled for automated retrieval; file imports require explicit attestation; synthetic fixtures carry separate provenance | Written source approval/terms and an approved real snapshot are not present |
 | Wrong parcel or overconfident match | Versioned normalization, multiple candidate evidence, score/margin, contradictions, source quality, unit/master protections, abstention, and human decisions | Real property accuracy and spatial database behavior require approved data and production evaluation |
 | Stale derived property projection | Full imports rebuild aliases/buildings; rollback follows explicit import lineage; immutable property source rows remain available | Database-native concurrency and operational restore testing require PostgreSQL/integration environment |
+| Overconfident or irreproducible opportunity rank | Versioned release registry, as-of boundary, feature/source provenance, hard negative/contradiction/property gates, explicit abstention, human-review bands, append-only overrides, and predecessor rollback | No real outcome labels or calibration; the baseline is not a probability and cannot establish damage, coverage, claim validity, or outreach eligibility |
+| Unauthorized source-driven alert | Acquisition mode and authorization basis are persisted; synthetic/live/unauthorized retrievals cannot satisfy the alert gate; Sarasota live polling remains disabled | Written source approvals and production alert policy remain external gates |
 
 ## Required production follow-up
 

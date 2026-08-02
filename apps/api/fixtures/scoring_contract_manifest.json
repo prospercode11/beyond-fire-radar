@@ -1,0 +1,19 @@
+{
+  "purpose": "temporal and leakage contract only; not an accuracy dataset",
+  "cases": [
+    {
+      "case_id": "contract-train-1",
+      "group_id": "contract-incident-a",
+      "split": "train",
+      "prediction_at": "2026-01-01T00:00:00+00:00",
+      "available_at": ["2025-12-31T00:00:00+00:00"]
+    },
+    {
+      "case_id": "contract-evaluation-1",
+      "group_id": "contract-incident-b",
+      "split": "evaluation",
+      "prediction_at": "2026-02-01T00:00:00+00:00",
+      "available_at": ["2026-01-31T00:00:00+00:00"]
+    }
+  ]
+}

@@ -25,7 +25,7 @@ flowchart LR
 4. Owner and organization data is restricted and is never automatically contacted.
 5. Model outputs are governed artifacts, not facts.
 
-## Phase 2 through Phase 4 request flow
+## Phase 2 through Phase 5 request flow
 
 ```mermaid
 sequenceDiagram
@@ -57,6 +57,11 @@ sequenceDiagram
   W->>A: POST /incidents/{id}/property-matches or /property-matches/decisions
   A->>DB: Generate versioned candidates, preserve evidence, or persist reviewed decision
   A-->>W: Candidates, abstention, explanations, provenance, and review state
+  U->>W: Request a versioned provisional opportunity score
+  W->>A: POST /incidents/{id}/opportunity-score with provider and optional as-of
+  A->>DB: Load registered release, source/property evidence, hard gates, and current human override
+  A->>DB: Persist score run, feature contributions, source IDs, explanation, and predecessor
+  A-->>W: Non-probability score, evidence tier, abstention/alert gate, provenance, and review controls
 ```
 
-Manual snapshot ingestion and Sarasota-only incident processing are the Phase 2/3 boundary. Phase 4 adds manual/file property workflows only. Dispatch retrievals carry `manual_snapshot` or `synthetic_fixture` provenance; official property imports require an explicit authorization attestation and synthetic fixture imports are labeled separately. Live-collected input and automated official property retrieval remain disabled. The external approval gate is not removed or bypassed. No Boca radio, Broadcastify, scoring, dashboard, or outreach source is in scope.
+Manual snapshot ingestion and Sarasota-only incident processing are the Phase 2/3 boundary. Phase 4 adds manual/file property workflows only. Phase 5 adds a non-probability evidence ranking over already imported Sarasota records; it does not add a source. Dispatch retrievals carry `manual_snapshot` or `synthetic_fixture` provenance; official property imports require an explicit authorization attestation and synthetic fixture imports are labeled separately. Live-collected input and automated official property retrieval remain disabled. The external approval gate is not removed or bypassed. No Boca radio, Broadcastify, empirical model, dashboard, or outreach source is in scope.

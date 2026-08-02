@@ -1,7 +1,7 @@
 # Current state
 
-Updated: 2026-08-01 after Phase 4 verification
-Scope: Phase 0 through Phase 4 only
+Updated: 2026-08-01 after Phase 5 verification
+Scope: Phase 0 through Phase 5 only
 
 ## Implemented
 
@@ -29,10 +29,14 @@ Scope: Phase 0 through Phase 4 only
 - Explainable parcel candidate generation using normalized addresses, aliases, street/house, municipality/ZIP, coordinates, grid/context, and master/unit relationships with explicit score/margin, contradictions, quality, abstention, and human-review evidence.
 - Authenticated property import, parcel provenance, match/reprocess, and human confirm/reject/clear/correct APIs; human decisions remain visible after reprocessing.
 - Phase 4 focused adversarial tests, migration round-trip, isolated application/API verification, independent Luna review, and corrected high-severity findings.
+- Phase 5 migrations `0009_opportunity_scoring` through `0011_temporal_incident_links` add a versioned scoring registry, score history, feature-level contributions/provenance, human overrides, explicit as-of boundaries, rollback predecessors, and effective-end timestamps for historical incident assignments.
+- Transparent opportunity scoring uses separately versioned evidence components, a weighted geometric provisional rank, hard negative/contradiction/property gates, missing-data penalties, human-review bands, and explicit abstention. It is not a probability and does not infer damage, coverage, claim validity, or outreach eligibility.
+- Authenticated score/list/rescore/override/version-registration/rollback APIs and leakage-controlled evaluation contracts are implemented. Synthetic and unauthorized/live retrievals cannot produce operational alerts; Sarasota live polling remains disabled.
+- Phase 5 focused scoring/evaluation tests, migration round-trip, verification contract, application/API checks, independent Luna review, and corrected high-severity findings are recorded in the Phase 5 review/handoff.
 
 ## Explicitly not implemented
 
-Live Sarasota polling, cross-source deduplication, GIS/permit imports, opportunity scoring, calibration, opportunity workflow, notifications, maps, dashboard work, model lab, and consumer outreach.
+Live Sarasota polling, cross-source deduplication, GIS/permit imports, empirical calibration, outcome capture, notifications, maps, final dashboard work, model lab, and consumer outreach.
 
 ## Environment evidence
 
@@ -42,4 +46,4 @@ The external-source approval gate remains intact. Dispatch processing accepts on
 
 ## Next controlled step
 
-Phase 5 — transparent opportunity-scoring foundation — is the next controlled step. It must remain separate from property identity resolution and must not infer insurance coverage, claim validity, or consumer contact eligibility. Keep live Sarasota polling and the official property-source integration disabled until their external evidence gates are closed.
+Phase 6 — internal review workflow and dashboard foundation — is the next controlled step. It must preserve the Phase 5 evidence/provenance boundaries and must not add live polling, property automation, empirical model claims, or consumer outreach. Keep live Sarasota polling and the official property-source integration disabled until their external evidence gates are closed.

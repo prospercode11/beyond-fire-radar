@@ -4,7 +4,7 @@ Beyond Fire Radar is an internal, research-only property-loss intelligence syste
 
 ## Current scope
 
-Phase 0 through Phase 3 — Sarasota incident intelligence — are complete in this repository:
+Phase 0 through Phase 5 — Sarasota incident intelligence, property resolution, and transparent scoring foundation — are complete in this repository:
 
 - Architecture, product, modeling, compliance, data, testing, execution, and handoff documents.
 - FastAPI modular-monolith API with SQLAlchemy and Alembic migrations.
@@ -17,7 +17,7 @@ Phase 0 through Phase 3 — Sarasota incident intelligence — are complete in t
 - Canonical Sarasota incidents with conservative deterministic/probabilistic linkage, source-row provenance, contradiction evidence, versioned classification, timelines, state transitions, rescore hooks, and audited merge/split controls.
 - Small Next.js TypeScript shell that reports foundation status.
 
-Phase 4 now provides a manual/file prototype for Sarasota property imports and explainable address-to-parcel resolution. CSV/XLSX/ZIP imports, provenance, rollback, candidate evidence, abstention, and human review are available through authenticated APIs. Official property-source approval, live polling, learned scoring, dashboard work, notifications, Boca/Broadcastify, and outreach remain gated later phases; the repository fixture is not real-world accuracy evidence.
+Phase 4 provides a manual/file prototype for Sarasota property imports and explainable address-to-parcel resolution. Phase 5 adds a versioned, explainable, non-probability opportunity-ranking foundation with feature provenance, hard gates, abstention, review bands, as-of scoring, overrides, rescore history, and rollback through authenticated APIs. Official property-source approval, live polling, learned/calibrated scoring, outcome capture, dashboard work, notifications, Boca/Broadcastify, and outreach remain gated; repository fixtures are not real-world accuracy evidence.
 
 ## Local setup
 

@@ -65,3 +65,6 @@ PropertyImporter = Annotated[User, Depends(require_role("administrator", "analys
 PropertyReviewer = Annotated[
     User, Depends(require_role("administrator", "licensed_adjuster", "analyst"))
 ]
+OpportunityReviewer = Annotated[
+    User, Depends(require_role("administrator", "licensed_adjuster", "analyst"))
+]

@@ -412,6 +412,7 @@ class IncidentObservationLink(Base):
     assignment_key: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, unique=True)
     decision_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     created_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -975,6 +976,114 @@ class PropertyMatchDecision(Base):
     )
     decision: Mapped[str] = mapped_column(String(24), nullable=False)
     corrected_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ScoringVersion(Base):
+    __tablename__ = "scoring_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    version: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    component_versions: Mapped[dict[str, Any]] = mapped_column(
+        JsonType, nullable=False, default=dict
+    )
+    priors: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    rules: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class OpportunityScoreRun(Base):
+    __tablename__ = "opportunity_score_runs"
+    __table_args__ = (
+        Index(
+            "uq_opportunity_score_current_incident",
+            "incident_id",
+            unique=True,
+            sqlite_where=text("is_current = 1"),
+            postgresql_where=text("is_current = true"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    property_match_run_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("incident_property_match_runs.id"), nullable=True
+    )
+    property_provider_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("providers.id"), index=True, nullable=True
+    )
+    scoring_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    previous_score_run_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("opportunity_score_runs.id"), nullable=True
+    )
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    provisional_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    evidence_tier: Mapped[str] = mapped_column(String(32), nullable=False)
+    alert_eligibility: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    abstention_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    hard_gate_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    explanation: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    source_observation_ids: Mapped[list[str]] = mapped_column(
+        JsonType, nullable=False, default=list
+    )
+    available_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+
+
+class OpportunityScoreFeature(Base):
+    __tablename__ = "opportunity_score_features"
+    __table_args__ = (
+        UniqueConstraint("score_run_id", "feature_name", name="uq_opportunity_score_feature_name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    score_run_id: Mapped[str] = mapped_column(
+        ForeignKey("opportunity_score_runs.id"), index=True, nullable=False
+    )
+    feature_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    contribution: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    source_observation_ids: Mapped[list[str]] = mapped_column(
+        JsonType, nullable=False, default=list
+    )
+    available_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    feature_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class OpportunityScoreOverride(Base):
+    __tablename__ = "opportunity_score_overrides"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    score_run_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("opportunity_score_runs.id"), nullable=True
+    )
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     actor_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
