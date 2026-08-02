@@ -32,10 +32,17 @@ This ledger records executable evidence for the autonomous v1 objective. Synthet
 
 ## Phase 4 — Property ingestion and entity resolution
 
-- Status: in progress.
+- Status: complete for the local/manual prototype gate.
 - Scope: manual/file property imports, provenance-preserving parcel projections, address normalization, candidate generation, explainable match baseline, abstention, and human review controls.
 - External boundary: official Sarasota property data remains manual/approval-gated; local fixtures are synthetic pipeline evidence only.
-- Next evidence: Phase 4 unit/API/migration tests, application smoke, browser review of the property-review workflow, independent data-quality review, corrected high findings, updated handoff, and commit.
+- Evidence: Phase 4 unit/API/migration tests, application smoke, replay/provenance verification, independent Luna review with all critical/high findings fixed, updated handoff/review, and commit `64ac3fd`.
+- Limitation: official Sarasota property-source approval/terms and a real approved snapshot remain open; PostgreSQL/PostGIS and Redis were unavailable; dashboard/browser inspection belongs to Phase 6.
+
+## Phase 5 — Transparent opportunity-scoring foundation
+
+- Status: in progress.
+- Scope: versioned feature availability, source quality, incident validity, material loss/complexity/fit/data sufficiency, transparent ranking and abstention only. No arbitrary probability, insurance coverage inference, or consumer outreach.
+- Next evidence: scoring schema/migration, reproducible feature registry and evaluation harness, time-aware tests, independent Luna model-contract review, handoff, and commit.
 
 ## Remaining phases
 

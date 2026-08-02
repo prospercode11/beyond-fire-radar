@@ -2,6 +2,7 @@
 
 Date: 2026-08-01
 Status: complete for the local/manual prototype gate; do not treat this as approval for automated official-source retrieval
+Commit: `64ac3fd` (`Complete Phase 4 property resolution`)
 
 ## Delivered
 
