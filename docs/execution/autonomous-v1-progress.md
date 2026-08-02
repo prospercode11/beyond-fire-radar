@@ -89,7 +89,7 @@ This ledger records executable evidence for the autonomous v1 objective. Synthet
 - Governance: Sarasota remains manual/file/fixture/replay only; live polling and learned serving are false. No approval, credential, source license, accuracy, damage, coverage, claim-validity, or outreach conclusion is invented.
 - Evidence: final Phase 10 verification contract, migration round-trip through `0022_raw_purge_pending_state`, clean API smoke/replay, dependency audit, focused hardening/failure tests, authenticated production-browser acceptance, final architecture/security/data-integrity/UX/Luna review, and updated handoff.
 - Limitation: Docker/Colima, PostgreSQL/PostGIS, Redis, managed R2, production SSO/MFA, TLS/domain, source approvals, and operator-owned staging recovery remain external gates.
-- Commits: implementation and closure-evidence commits are recorded in `docs/handoffs/phase-10-production-hardening.md` after the final ledger commit.
+- Implementation commit: `e2c7d77` (`Complete Phase 10 production hardening`); the closure-evidence commit follows this ledger update.
 
 ## Remaining activation gates
 

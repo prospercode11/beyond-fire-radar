@@ -44,4 +44,4 @@ Pasteur/Luna completed an independent read-only review. Initial result: Critical
 
 Docker/Colima was unavailable, so PostgreSQL/PostGIS, Redis, managed object storage, and managed backup restore were not executed. Production SSO/MFA, TLS/domain, written source approvals, deployment credentials, RPO/RTO, operator-owned staging recovery, and dependency remediation remain external gates. The next action is environment provisioning and approval review, not a new product phase.
 
-Implementation commit: pending the closure commit sequence.
+Implementation commit: `e2c7d77` (`Complete Phase 10 production hardening`). The final ledger wording is recorded in the subsequent closure-evidence commit.
