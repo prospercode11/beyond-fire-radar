@@ -55,6 +55,15 @@ This ledger records executable evidence for the autonomous v1 objective. Synthet
 - Limitation: the map has no live GIS feed, the shell has no authenticated domain-data workflow yet, and production dashboard deployment, PostgreSQL/PostGIS, Redis, and external-source approvals remain open.
 - Commit: `b4edd71` (`Complete Phase 6 dashboard foundation`).
 
+## Phase 7 — Internal notifications and workflow
+
+- Status: complete for the internal/local workflow gate.
+- Scope: authenticated internal alerts, duplicate-safe in-app notification jobs, suppression/acknowledgment/snooze/resolve/revoke controls, assignment history, append-only incident notes, and existing-client CSV import with provenance and idempotency.
+- Governance: only explicitly authorized manual Sarasota dispatch retrievals with eligible score/property evidence may create an operational internal alert. Synthetic fixtures, unauthorized data, live polling, and suppressed/revoked records cannot create or deliver alerts. No email, SMS, phone, consumer outreach, or external notification integration exists.
+- Evidence: migrations `0012_internal_workflow` and `0013_workflow_state_guards`, repository verification (41 tests), focused workflow tests, fresh migration/API smoke, authenticated browser workflow inspection, updated source/data/execution documents, and independent Luna review with all critical/high findings fixed.
+- Limitation: no real approved Sarasota dispatch snapshot, production identity/MFA, PostgreSQL/PostGIS/Redis execution, or empirical outcome evidence is available; ordinary local fixtures correctly generate zero operational alerts.
+- Commit: pending in the current verified worktree.
+
 ## Remaining phases
 
-Phases 7–10 remain pending and must advance sequentially only after each preceding acceptance gate passes. Consumer outreach, legal conclusions, invented approvals, and unvalidated model accuracy remain prohibited.
+Phases 8–10 remain pending and must advance sequentially only after each preceding acceptance gate passes. Consumer outreach, legal conclusions, invented approvals, and unvalidated model accuracy remain prohibited.

@@ -8,11 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api.routes import admin, auth, incidents, opportunities, properties, providers
+from app.api.routes import admin, auth, incidents, opportunities, properties, providers, workflow
 from app.api.routes.providers import seed_providers
 from app.config import get_settings
 from app.db import SessionLocal
-from app.models import Provider
 
 settings = get_settings()
 
@@ -21,8 +20,8 @@ settings = get_settings()
 async def lifespan(_: FastAPI):
     # Migrations own schema creation. Seeding is idempotent and only adds known provider metadata.
     with SessionLocal() as db:
-        if db.get(Provider, "fixture.sarasota.dispatch") is None:
-            seed_providers(db)
+        seed_providers(db)
+        db.commit()
     yield
 
 
@@ -59,7 +58,7 @@ def healthz() -> dict[str, object]:
         "status": "ok",
         "service": settings.app_name,
         "live_polling_enabled": settings.enable_live_sarasota_dispatch_polling,
-        "phase": "5-opportunity-scoring",
+        "phase": "7-internal-workflow",
     }
 
 
@@ -80,4 +79,5 @@ app.include_router(incidents.router)
 app.include_router(properties.import_router)
 app.include_router(properties.match_router)
 app.include_router(opportunities.router)
+app.include_router(workflow.router)
 app.include_router(admin.router)

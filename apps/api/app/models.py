@@ -6,6 +6,7 @@ from typing import Any, Optional
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -1086,6 +1087,160 @@ class OpportunityScoreOverride(Base):
     decision: Mapped[str] = mapped_column(String(32), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     actor_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class InternalAlert(Base):
+    __tablename__ = "internal_alerts"
+    __table_args__ = (
+        UniqueConstraint("dedupe_key", name="uq_internal_alert_dedupe_key"),
+        Index("ix_internal_alert_status_created", "status", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    score_run_id: Mapped[str] = mapped_column(
+        ForeignKey("opportunity_score_runs.id"), index=True, nullable=False
+    )
+    dedupe_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    alert_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    severity: Mapped[str] = mapped_column(String(24), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="open")
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JsonType, nullable=False, default=dict
+    )
+    suppression_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    acknowledged_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    acknowledged_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolved_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    snoozed_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revoked_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    escalated_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    escalated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class NotificationJob(Base):
+    __tablename__ = "notification_jobs"
+    __table_args__ = (
+        UniqueConstraint("alert_id", "channel", name="uq_notification_alert_channel"),
+        CheckConstraint("channel = 'in_app'", name="ck_notification_jobs_in_app"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    alert_id: Mapped[str] = mapped_column(
+        ForeignKey("internal_alerts.id"), index=True, nullable=False
+    )
+    channel: Mapped[str] = mapped_column(String(24), nullable=False, default="in_app")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_attempt_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class IncidentAssignment(Base):
+    __tablename__ = "incident_assignments"
+    __table_args__ = (
+        Index(
+            "uq_incident_assignment_current",
+            "incident_id",
+            unique=True,
+            sqlite_where=text("ended_at IS NULL"),
+            postgresql_where=text("ended_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    assignee_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(40), nullable=False, default="reviewer")
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WorkflowNote(Base):
+    __tablename__ = "workflow_notes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("canonical_incidents.id"), index=True, nullable=False
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    note_type: Mapped[str] = mapped_column(String(40), nullable=False, default="review")
+    author_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ClientImport(Base):
+    __tablename__ = "client_imports"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_client_import_idempotency"),
+        UniqueConstraint("content_hash", name="uq_client_import_content_hash"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(320), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    accepted_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rejected_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    raw_payload_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ExistingClientRecord(Base):
+    __tablename__ = "existing_client_records"
+    __table_args__ = (
+        UniqueConstraint("client_import_id", "row_number", name="uq_client_import_row"),
+        Index("ix_existing_client_address", "normalized_address"),
+        Index("ix_existing_client_parcel", "parcel_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    client_import_id: Mapped[str] = mapped_column(
+        ForeignKey("client_imports.id"), index=True, nullable=False
+    )
+    row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    client_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    normalized_address: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    parcel_id: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
+    do_not_contact: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    source_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    raw_payload: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

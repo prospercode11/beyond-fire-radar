@@ -1,18 +1,19 @@
 # Phase 6 handoff — internal dashboard foundation
 
 Date: 2026-08-01
-Scope: Phase 6 only. Phase 7 has not started.
+Scope: Phase 6 dashboard foundation and its authenticated local read integration. Phase 7 workflow behavior is handed off separately.
 
 ## Outcome
 
 Phase 6 is complete for the internal/local dashboard gate. The responsive Next.js shell now provides:
 
 - Command Center with review queue, source posture, source freshness uncertainty, API posture, and review principles.
-- Incident Stream with a source-preserving empty state.
-- Opportunities with an explicit provisional, non-probability research-ranking notice and safe not-loaded state.
-- Data Health with manual-only Sarasota posture, API status, and disconnected external-service states.
+- Incident Stream backed by authenticated incident, retrieval, and detail reads, with a source-preserving empty state when no records are available.
+- Opportunities backed by authenticated provisional score reads with an explicit non-probability research-ranking notice and safe not-run state.
+- Data Health with manual-only Sarasota posture, API status, retrieval freshness, and disconnected external-service states.
 - Settings with visible live-polling, outreach, probability-language, and human-review governance boundaries.
-- Incident map, evidence workbench, and property-context surfaces with honest empty/not-loaded states.
+- Incident map, evidence workbench, and property-context surfaces with honest empty/not-run states and source-preserving detail evidence.
+- Guarded manual snapshot import, property match/review controls, and provisional score/rescore controls remain internal-only and are subject to API authorization and source gates.
 - Desktop/mobile navigation, visible focus treatment, keyboard activation, responsive layout, and loading/API-unavailable/empty states.
 
 The UI names Sarasota County manual snapshots as the current source posture. Live Sarasota polling remains disabled. No approval, legal status, live map point, incident, property candidate, score, damage finding, coverage opinion, claim-validity conclusion, or outreach recommendation is invented by the browser.
@@ -41,6 +42,7 @@ Browser verification passed in the Codex in-app browser:
 - At 390×844, the measured document width was 375px and scroll width was 375px; no horizontal overflow was present.
 - All five primary navigation buttons had unique accessible names. Incident Stream navigation changed the active view.
 - Workbench tabs are native keyboard-operable buttons with controlled selection, tabpanel semantics, and arrow/home/end navigation.
+- Authenticated local replay inspection loaded the Command Center, selected an incident from the stream, and exposed overview, source posture, original observations, contradiction/linkage explanations, timeline, property, and score states. Manual import replay remained labeled `manual_snapshot` or `synthetic_fixture` according to the supplied input.
 - Browser tabs were finalized after inspection and the local web server was stopped.
 
 Independent Luna review is recorded in [phase-06-dashboard-review.md](../reviews/phase-06-dashboard-review.md). The final pass found no unresolved critical or high-severity findings after remediation.
@@ -49,7 +51,7 @@ Independent Luna review is recorded in [phase-06-dashboard-review.md](../reviews
 
 - Sarasota remains the only initial source. No Boca radio, Broadcastify, or live polling was added.
 - The external-source approval gate remains intact; manual availability is not treated as legal approval.
-- No live GIS/map feed, authenticated dashboard domain-read workflow, production deployment, or new database schema was added.
+- No live GIS/map feed, production deployment, or production identity system was added. The authenticated domain-read workflow is local/prototype scope and remains governed by the API.
 - PostgreSQL/PostGIS and Redis integration could not run because Docker/Colima is unavailable on this host; this remains an external integration gate.
 - The UI is not production authorization. The API remains the authorization boundary.
 
@@ -59,4 +61,4 @@ Independent Luna review is recorded in [phase-06-dashboard-review.md](../reviews
 
 ## Next controlled step
 
-Phase 7 — outcomes and evaluation foundation. Stop here for Phase 6 scope; do not begin Phase 7 in this handoff.
+Phase 7 — internal notifications and workflow. Phase 7 is handed off separately; do not begin Phase 8 from this handoff.

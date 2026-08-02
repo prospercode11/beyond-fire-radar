@@ -87,6 +87,7 @@ class ImportJobResponse(BaseModel):
     error: Optional[str]
     acquisition_mode: str
     authorization_basis: Optional[str]
+    created_at: datetime
 
 
 class SchemaAlertResponse(BaseModel):
@@ -205,6 +206,7 @@ class IncidentSummaryResponse(BaseModel):
     observation_count: int
     is_active: bool
     merged_into_id: Optional[str]
+    source_acquisition_modes: List[str]
 
 
 class IncidentDetailResponse(IncidentSummaryResponse):
@@ -214,7 +216,6 @@ class IncidentDetailResponse(IncidentSummaryResponse):
     canonical_station: Optional[str]
     classification_explanation: Dict[str, Any]
     current_explanation: Dict[str, Any]
-    source_acquisition_modes: List[str]
     source_retrieval_ids: List[str]
     observations: List[ObservationResponse]
     source_row_ids: List[str]
@@ -438,3 +439,105 @@ class ScoringVersionCreateRequest(BaseModel):
     priors: Dict[str, float]
     rules: Dict[str, Any]
     description: str = Field(min_length=10, max_length=2000)
+
+
+class WorkflowAlertResponse(BaseModel):
+    id: str
+    incident_id: str
+    score_run_id: str
+    dedupe_key: str
+    alert_type: str
+    severity: str
+    status: str
+    title: str
+    summary: str
+    evidence_snapshot: Dict[str, Any]
+    suppression_reason: Optional[str]
+    acknowledged_by: Optional[str]
+    acknowledged_at: Optional[datetime]
+    resolved_by: Optional[str]
+    resolved_at: Optional[datetime]
+    snoozed_until: Optional[datetime]
+    revoked_by: Optional[str]
+    revoked_at: Optional[datetime]
+    escalated_by: Optional[str]
+    escalated_at: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkflowAlertActionRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=1000)
+    snoozed_until: Optional[datetime] = None
+
+
+class AlertGenerationResponse(BaseModel):
+    scanned_score_runs: int
+    created_alerts: int
+    existing_alerts: int
+    suppressed_alerts: int
+    skipped_score_runs: int
+
+
+class AssignmentRequest(BaseModel):
+    assignee_user_id: Optional[str] = None
+    role: str = Field(default="reviewer", min_length=2, max_length=40)
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class AssignmentResponse(BaseModel):
+    id: Optional[str]
+    incident_id: str
+    assignee_user_id: Optional[str]
+    role: Optional[str]
+    reason: Optional[str]
+    actor_user_id: Optional[str]
+    ended_at: Optional[datetime]
+    created_at: Optional[datetime]
+
+
+class WorkflowNoteCreateRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=5000)
+    note_type: str = Field(default="review", min_length=2, max_length=40)
+
+
+class WorkflowNoteResponse(BaseModel):
+    id: str
+    incident_id: str
+    body: str
+    note_type: str
+    author_user_id: str
+    created_at: datetime
+
+
+class ClientImportResponse(BaseModel):
+    id: str
+    source_filename: str
+    status: str
+    accepted_row_count: int
+    rejected_row_count: int
+    content_hash: str
+    created_at: datetime
+
+
+class ExistingClientRecordResponse(BaseModel):
+    id: str
+    client_import_id: str
+    row_number: int
+    client_key: str
+    normalized_address: Optional[str]
+    parcel_id: Optional[str]
+    do_not_contact: bool
+    source_note: Optional[str]
+    created_at: datetime
+
+
+class NotificationJobResponse(BaseModel):
+    id: str
+    alert_id: str
+    channel: str
+    status: str
+    attempt_count: int
+    last_attempt_at: Optional[datetime]
+    error_message: Optional[str]
+    created_at: datetime

@@ -9,6 +9,7 @@
 | `sarasota.gis` | Sarasota County official GIS/open-data resources | Sarasota County, FL | GIS layers | Not implemented | Requires layer-by-layer source/terms verification |
 | `sarasota.permits` | Authorized permit datasets | Sarasota County, FL | Permit records | Not implemented | Manual import first unless authorized integration is confirmed |
 | `sarasota.outcomes` | Authorized CAD/fire/public-record/manual outcomes | Sarasota County, FL | Outcome labels | Not implemented | Not assumed real-time; labels require reviewer identity and timestamp |
+| `internal.client_roster` | Internal existing-client roster supplied by an authorized user | Internal | Client suppression/reference CSV | Manual/file import enabled for internal workflow only | Not an external authority; rows are retained for provenance and suppression controls; no consumer outreach is implemented |
 
 Every activated provider must populate authority, authorized-use status, enabled state, interval, retrieval/effective times, schema/parser versions, hashes, counts, health, failure state, terms note, and approval/contact note.
 
@@ -16,4 +17,6 @@ Incident processing is provenance-gated by acquisition mode: `manual_snapshot` a
 
 Phase 5 scoring preserves the same provenance boundary. A score may be computed for research/review from current manual or fixture records, but an operational alert requires only explicitly authorized `manual_snapshot` retrievals with an authorization basis, a resolved property match, no contradiction/negative hard gate, and available fit evidence. Synthetic fixtures and live/unauthorized retrievals cannot satisfy that alert gate; this is an application control, not a legal approval.
 
-Phase 6 adds no provider. The dashboard labels Sarasota County manual snapshots, shows live polling as disabled, and presents safe empty states when no approved record is available. Its incident-map surface has no live GIS feed and must not be read as geospatial evidence.
+Phase 6 adds no external provider. The dashboard reads governed incident/retrieval/property/score APIs, labels Sarasota County manual snapshots, shows live polling as disabled, and presents safe empty states when no approved record is available. Its incident-map surface has no live GIS feed and must not be read as geospatial evidence.
+
+Phase 7 adds only the internal client-roster workflow source. Client CSV rows are manually supplied internal reference data, not external-source approval evidence. Internal alert delivery is in-app only; email, SMS, phone, and consumer outreach channels are disabled and unimplemented.

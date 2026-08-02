@@ -1,8 +1,8 @@
 # Data dictionary
 
-## Phase 1 through Phase 6 tables
+## Phase 1 through Phase 7 tables
 
-Phase 6 adds no database tables or source fields. The dashboard is a presentation layer over the governed API and must not create inferred records, map points, property candidates, or score facts in the browser.
+Phase 6 adds no database tables or source fields. The dashboard reads governed APIs and must not create inferred records, map points, property candidates, or score facts in the browser. Phase 7 adds internal workflow tables; these are not external-source evidence and do not enable consumer outreach.
 
 | Table | Purpose | Provenance/audit rule |
 | --- | --- | --- |
@@ -46,6 +46,12 @@ Phase 6 adds no database tables or source fields. The dashboard is a presentatio
 | `opportunity_score_runs` | Versioned incident ranking executions | Incident/property-run/provider, scoring version, as-of boundary, explicit predecessor, provisional score/tier, hard gate/abstention, alert eligibility, explanation, source observations, current marker, and audit timestamps |
 | `opportunity_score_features` | Feature-level score evidence and contribution record | Score run, value/status, log-space contribution, source observations, availability, feature version, evidence, and explanation; missing values remain visible |
 | `opportunity_score_overrides` | Immutable reviewer decisions over score presentation/eligibility | Incident/score run, suppress/promote-review/hold/clear decision, reason, reviewer, timestamp; baseline score runs are not rewritten |
+| `internal_alerts` | Deduplicated internal review alerts | Incident/score run, stable dedupe key, eligibility evidence snapshot, status/suppression/revocation/acknowledgment timestamps, and actor fields; no consumer delivery fields |
+| `notification_jobs` | In-app notification delivery jobs | Alert/channel unique key, status, attempts, error, and timestamps; only `in_app` is enabled and all dispatches are audited |
+| `incident_assignments` | Current and historical internal incident ownership | Incident, assignee, role, reason, actor, start/end timestamps; current assignment is unique and changes are audited |
+| `workflow_notes` | Append-only internal incident review notes | Incident, note body/type, author, and timestamp; edits/deletes are not exposed |
+| `client_imports` | Internal existing-client roster import envelope | Idempotency/content hash, raw payload reference, counts, creator, and timestamp; manually supplied internal data only |
+| `existing_client_records` | Immutable row-level internal client reference data | Import/row, client key, normalized address/parcel, do-not-contact flag, source note, raw row, and timestamp |
 | `feature_flags` | Controlled activation boundary | Legally gated or incomplete integrations default off |
 | `legal_approvals` | Approval evidence | Approval status and notes retained |
 

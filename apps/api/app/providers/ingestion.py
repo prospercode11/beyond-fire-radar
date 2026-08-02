@@ -65,6 +65,7 @@ class IngestionReport:
     error: Optional[str]
     acquisition_mode: str
     authorization_basis: Optional[str]
+    created_at: datetime
 
 
 def report_from_job(db: Session, job: ImportJob, replayed: bool) -> IngestionReport:
@@ -86,6 +87,7 @@ def report_from_job(db: Session, job: ImportJob, replayed: bool) -> IngestionRep
             error="legacy import job has no retrieval reference",
             acquisition_mode="unknown",
             authorization_basis=None,
+            created_at=job.created_at,
         )
     alert_count = db.scalar(
         select(func.count())
@@ -113,6 +115,7 @@ def report_from_job(db: Session, job: ImportJob, replayed: bool) -> IngestionRep
         error=retrieval.error_message,
         acquisition_mode=retrieval.acquisition_mode,
         authorization_basis=retrieval.authorization_basis,
+        created_at=job.created_at,
     )
 
 

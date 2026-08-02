@@ -23,6 +23,7 @@ from app.models import (
     IncidentObservationLink,
     IncidentTimelineEvent,
     ProviderRetrieval,
+    RawDispatchRow,
     RawSnapshot,
 )
 from app.schemas import (
@@ -67,6 +68,20 @@ def _summary(db, incident: CanonicalIncident) -> IncidentSummaryResponse:
         )
         or 0
     )
+    source_modes = db.scalars(
+        select(ProviderRetrieval.acquisition_mode)
+        .join(RawSnapshot, RawSnapshot.retrieval_id == ProviderRetrieval.id)
+        .join(RawDispatchRow, RawDispatchRow.raw_snapshot_id == RawSnapshot.id)
+        .join(DispatchObservation, DispatchObservation.raw_dispatch_row_id == RawDispatchRow.id)
+        .join(
+            IncidentObservationLink,
+            IncidentObservationLink.observation_id == DispatchObservation.id,
+        )
+        .where(
+            IncidentObservationLink.incident_id == incident.id,
+            IncidentObservationLink.is_current.is_(True),
+        )
+    ).all()
     return IncidentSummaryResponse(
         id=incident.id,
         provider_id=incident.provider_id,
@@ -87,6 +102,7 @@ def _summary(db, incident: CanonicalIncident) -> IncidentSummaryResponse:
         observation_count=count,
         is_active=incident.is_active,
         merged_into_id=incident.merged_into_id,
+        source_acquisition_modes=sorted(set(source_modes)),
     )
 
 
@@ -180,7 +196,6 @@ def _detail(db, incident: CanonicalIncident) -> IncidentDetailResponse:
         canonical_station=incident.canonical_station,
         classification_explanation=incident.classification_explanation,
         current_explanation=incident.current_explanation,
-        source_acquisition_modes=sorted({item.acquisition_mode for item in source_retrievals}),
         source_retrieval_ids=sorted({item.id for item in source_retrievals}),
         observations=[
             _observation_response(by_id[item_id]) for item_id in observation_ids if item_id in by_id

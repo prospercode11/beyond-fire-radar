@@ -105,6 +105,19 @@
 - [x] Phase 6 handoff and execution/review documents recorded.
 - [ ] Production dashboard deployment, authenticated data workflows, live GIS, and external PostgreSQL/PostGIS/Redis integration remain later/external gates.
 
+## Phase 7 — Notifications and workflow
+
+- [x] Migration-owned internal alerts and in-app notification jobs with stable deduplication keys.
+- [x] Alert generation is source- and score-gated; synthetic, unauthorized, and live-polling evidence cannot create operational alerts.
+- [x] Duplicate generation and notification jobs are idempotent; suppression and revocation prevent delivery or later acknowledgment/resolution.
+- [x] Internal-only acknowledgment, snooze, resolve, suppress, revoke, escalation, eligibility-checked unsuppress, assignment, append-only notes, and existing-client CSV import controls are authenticated and audited.
+- [x] Existing-client import is idempotent, size-limited, row-validating, provenance-preserving, and does not send outreach.
+- [x] API/unit tests cover fixture/unauthorized alert rejection, suppression precedence, notification channel boundary, assignment/note/client import, and audit records.
+- [x] Formatting, lint, type, unit, migration, API smoke, production build, and focused workflow checks recorded in the Phase 7 handoff.
+- [x] Independent Luna review completed; critical/high findings addressed.
+- [ ] Email, SMS, phone, consumer outreach, external notification providers, and production identity/MFA remain prohibited or later-gated.
+- [ ] PostgreSQL/PostGIS and Redis integration execution: Docker/Colima unavailable in this environment.
+
 ## Phase gate rule
 
-Phase 7 must not start until the Phase 6 handoff is accepted. Live Sarasota polling, official property automation, empirical calibration, outcome capture, notifications, Boca, Broadcastify, outreach, production dashboard deployment, and later phases remain separately gated by their requirements.
+Phase 8 must not start until the Phase 7 handoff is accepted. Live Sarasota polling, official property automation, empirical calibration, Boca, Broadcastify, outreach, production dashboard deployment, and later phases remain separately gated by their requirements.

@@ -1,7 +1,7 @@
 # Current state
 
-Updated: 2026-08-01 after Phase 6 verification
-Scope: Phase 0 through Phase 6 only
+Updated: 2026-08-01 after Phase 7 verification
+Scope: Phase 0 through Phase 7 only
 
 ## Implemented
 
@@ -37,17 +37,20 @@ Scope: Phase 0 through Phase 6 only
 - Phase 6 browser states distinguish loading, API-unavailable, and empty data; manual Sarasota provenance, freshness limits, uncertainty, human-review requirements, and disabled live polling remain visible.
 - Phase 6 responsive navigation and keyboard-accessible controls were inspected at desktop and 390×844 mobile dimensions; the dashboard has no horizontal overflow and does not fabricate records, map points, property candidates, or scores.
 - Phase 6 verification, handoff, and independent Luna review are recorded in the Phase 6 execution/review/handoff documents.
+- Phase 7 migrations `0012_internal_workflow` and `0013_workflow_state_guards` add internal alerts, in-app notification jobs, terminal-safe escalation, assignment history, append-only notes, and internal existing-client CSV import rows with idempotency, provenance, suppression, and audit controls.
+- Phase 7 workflow APIs provide deduplicated alert generation, suppression precedence, acknowledgment/snooze/resolve/revoke/escalation controls, eligibility-checked unsuppress, in-app-only notification dispatch, incident assignment, notes, and client-roster import. Fixture and unauthorized/live score evidence cannot create operational alerts.
+- Phase 7 focused workflow tests, fresh migration/API smoke verification, and the independent Luna review are recorded in the Phase 7 execution/review/handoff documents.
 
 ## Explicitly not implemented
 
-Live Sarasota polling, cross-source deduplication, GIS/permit imports, empirical calibration, outcome capture, notifications, live GIS/map data, model lab, production dashboard deployment, and consumer outreach.
+Live Sarasota polling, cross-source deduplication, GIS/permit imports, empirical calibration, outcome capture, live GIS/map data, model lab, production dashboard deployment, email/SMS/phone notifications, and consumer outreach.
 
 ## Environment evidence
 
 The host has Docker CLI but its configured Colima daemon is not running, and the Docker Compose plugin is not installed. Therefore the Compose definitions are present but PostgreSQL/PostGIS/Redis integration could not be truthfully claimed as executed in this environment. SQLite migration and application tests are the runnable local path. The parser also accepted a one-time current HTML response from the official Sarasota dispatch page for shape verification; that is not an authorization claim or an activated polling integration.
 
-The external-source approval gate remains intact. Dispatch processing accepts only retrievals explicitly labeled `manual_snapshot` or `synthetic_fixture`; property processing accepts manual/file workflows with an explicit authorization attestation for the official provider and labels synthetic fixture imports separately. No live polling is enabled or implied, no legal approval is invented, and acquisition mode is returned in import, retrieval, processing, incident, parcel, and match evidence. The Phase 6 browser surfaces read only the API health posture and do not bypass authentication or source gates. PostgreSQL/PostGIS and Redis execution remains unavailable on this host.
+The external-source approval gate remains intact. Dispatch processing accepts only retrievals explicitly labeled `manual_snapshot` or `synthetic_fixture`; property processing accepts manual/file workflows with an explicit authorization attestation for the official provider and labels synthetic fixture imports separately. No live polling is enabled or implied, no legal approval is invented, and acquisition mode is returned in import, retrieval, processing, incident, parcel, and match evidence. Internal client-roster files are explicitly labeled internal manual reference data and are not approval evidence. The authenticated browser reads through the API and does not bypass source gates. Phase 7 alerts require explicitly authorized manual dispatch evidence, eligible score hard gates, resolved property evidence, and no suppression; in-app delivery is the only enabled channel. PostgreSQL/PostGIS and Redis execution remains unavailable on this host.
 
 ## Next controlled step
 
-Phase 7 — outcomes and evaluation foundation — is the next controlled step. It must preserve the Phase 6 evidence/provenance boundaries and must not add live polling, property automation, empirical model claims, or consumer outreach. Keep live Sarasota polling, official property automation, and production dashboard deployment disabled until their external evidence gates are closed.
+Phase 8 — outcomes and analytics — is the next controlled step. It must preserve the Phase 7 evidence/provenance boundaries and must not add live polling, property automation, empirical model claims, or consumer outreach. Keep live Sarasota polling, official property automation, and production dashboard deployment disabled until their external evidence gates are closed.

@@ -18,16 +18,18 @@ Desktop/mobile/keyboard/visual inspection passes; uncertainty and freshness are 
 - Added safe loading, API-unavailable, and empty states. The browser does not fabricate incidents, opportunities, map points, property candidates, or scores.
 - Added provenance/uncertainty copy for provisional rankings and human-review requirements. Probability, damage, coverage, claim-validity, and outreach language is not used as an operational claim.
 - Added responsive navigation with accessible button names, visible focus treatment, keyboard activation, and a mobile layout without horizontal overflow.
-- Kept the browser as a presentation layer. The API remains the authorization boundary; no new backend data or source integration was added in this phase.
+- Connected the authenticated shell to the governed incident, retrieval, property, score, and provider-health read APIs. The browser remains a presentation layer; the API remains the authorization boundary.
+- Added source-preserving incident workbench tabs for overview, original observations, contradictions/linkage explanations, timeline, raw-source posture, property status, and provisional score status.
+- Added guarded manual snapshot import and property review controls. Sarasota imports remain explicitly attested manual workflows; fixture imports remain synthetic test inputs.
 
 ## Verification evidence
 
 - `npm --prefix apps/web run lint && npm --prefix apps/web run build` passed; Next production build generated route `/` at 5.47 kB and first-load JavaScript at 108 kB.
 - Browser inspection passed at the default desktop viewport and at 390×844: the required map/workbench/property surfaces are present, all five navigation buttons are discoverable, and measured document width was 375px with scroll width 375px.
 - Keyboard navigation was exercised through the browser controls; navigation buttons have unique accessible names and active-view content changes.
-- API-unavailable behavior was inspected and correctly showed a safe empty state with an explicit retry action.
+- API-unavailable behavior was inspected and correctly showed a safe empty state with an explicit retry action; authenticated read data was inspected separately against a local replay database.
 - The repository verification contract, migration check, and clean isolated API smoke were rerun after the dashboard changes; final outputs are recorded in the Phase 6 handoff.
 
 ## Boundaries carried forward
 
-No live Sarasota polling, Boca, Broadcastify, property ingestion, address-to-parcel matching, new scoring/model work, notifications, consumer outreach, or production dashboard deployment was started. The map is a source-preserving UI surface with no live GIS feed or inferred points.
+No live Sarasota polling, Boca, Broadcastify, GIS/permit automation, empirical model work, consumer outreach, or production dashboard deployment was started. The map is a source-preserving UI surface with no live GIS feed or inferred points. Phase 7 internal workflow APIs are documented separately and do not turn the dashboard into an external notification channel.
