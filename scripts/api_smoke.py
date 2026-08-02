@@ -20,6 +20,10 @@ def main() -> None:
         health.raise_for_status()
         if health.json()["live_polling_enabled"]:
             raise RuntimeError("live polling must be disabled in the foundation smoke test")
+        if health.json().get("learned_model_serving_enabled"):
+            raise RuntimeError(
+                "learned model serving must be disabled in the foundation smoke test"
+            )
 
         status = client.get("/api/v1/auth/bootstrap/status")
         status.raise_for_status()
@@ -43,6 +47,18 @@ def main() -> None:
         me.raise_for_status()
         if me.json()["email"] != email:
             raise RuntimeError("authenticated identity mismatch")
+        operations = client.get("/api/v1/admin/operations", headers=headers)
+        operations.raise_for_status()
+        if operations.json()["database"] != "connected":
+            raise RuntimeError("operations readiness did not report a connected database")
+        integrity = client.get("/api/v1/admin/audit/integrity", headers=headers)
+        integrity.raise_for_status()
+        if not integrity.json()["valid"]:
+            raise RuntimeError("audit chain integrity check failed")
+        metrics = client.get("/metrics")
+        metrics.raise_for_status()
+        if "bfr_http_requests_total" not in metrics.text:
+            raise RuntimeError("metrics endpoint did not expose request metrics")
 
         snapshot_path = (
             Path(__file__).resolve().parents[1] / "apps/api/fixtures/sample_sarasota_dispatch.csv"

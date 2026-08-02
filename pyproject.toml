@@ -30,6 +30,15 @@ quality = [
 postgres = [
   "psycopg[binary]>=3.2,<4",
 ]
+storage = [
+  "boto3>=1.35,<2",
+]
+redis = [
+  "redis>=5,<6",
+]
+security = [
+  "pip-audit>=2.7,<3",
+]
 
 [tool.setuptools.packages.find]
 where = ["apps/api"]

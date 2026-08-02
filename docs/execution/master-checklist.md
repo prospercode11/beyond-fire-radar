@@ -146,6 +146,23 @@
 - [ ] Real approved outcomes, held-out improvement, valid calibration, improved top-alert precision, complete error analysis, explicit administrator approval, and production model serving remain closed gates.
 - [ ] PostgreSQL/PostGIS and Redis integration execution: Docker/Colima unavailable in this environment.
 
+## Phase 10 — Production hardening and deployment readiness
+
+- [x] Threat-model, API-boundary, secure-default, trusted-host, RBAC/session, request-size, upload, archive, and security-header controls implemented and reviewed.
+- [x] Development bootstrap is bounded; production/staging reject bootstrap, SQLite, HTTP, wildcard hosts, memory rate limiting, non-ready Redis, and public API docs.
+- [x] Login/bootstrap and import rate limiting is bounded; production/staging Redis failures fail closed and readiness reports Redis dependency failure.
+- [x] Sessions store token hashes only and enforce expiry, idle timeout, active-session cap, revocation, and replacement checks.
+- [x] Audit events are chained with sequence, previous hash, event hash, chain-head integrity verification, and an admin inspection endpoint.
+- [x] Structured request logs, bounded metrics, liveness/readiness, provider/queue operations status, and error-tracking configuration point are implemented.
+- [x] Upload filenames/suffixes/content length and ZIP member/path/uncompressed-size limits are enforced before processing.
+- [x] SQLite backup/verify/restore including raw payloads, PostgreSQL dump/restore guidance, S3/R2 immutable adapter, dispatch/property retention tombstones, and dry-run-first failure-safe retention command are implemented.
+- [x] Production API/web Dockerfiles, non-root images, standalone Next output, Render release migration, environment templates, staging/prod separation, rollback, domain/TLS, and cost guidance are documented.
+- [x] Concurrency, latency-budget, failure-injection, backup/restore, dependency, migration, API, and full application verification are recorded in the Phase 10 handoff.
+- [x] Final E2E and authenticated desktop/mobile/keyboard/browser checks cover the governed v1 workflow and degraded states.
+- [x] Independent Luna architecture/security/data-integrity/UX review completed; all four initial High findings were remediated and the final review records Critical 0 / High 0.
+- [ ] PostgreSQL/PostGIS, Redis, managed object storage, managed backup/restore, production SSO/MFA, TLS/domain, and operator-owned staging recovery exercise: blocked/external on this host.
+- [ ] Real approved Sarasota snapshot/property data, real outcomes, learned serving, Boca/Broadcastify, external notifications, and consumer outreach remain disabled gates.
+
 ## Phase gate rule
 
-Phase 10 must not start until the Phase 9 handoff is accepted. Live Sarasota polling, official property automation, empirical calibration, Boca, Broadcastify, outreach, production dashboard deployment, learned-model deployment, and later phases remain separately gated by their requirements.
+Phase 10 is complete for local/staging hardening only. Live Sarasota polling, official property automation, empirical calibration, Boca, Broadcastify, outreach, managed production activation, learned-model deployment, and any later product work remain separately gated by their requirements.

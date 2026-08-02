@@ -76,6 +76,8 @@ class SessionToken(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    replaced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AuditEvent(Base):
@@ -90,8 +92,22 @@ class AuditEvent(Base):
     resource_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
     request_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     event_metadata: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False, unique=True, index=True)
+    previous_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    event_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+
+class AuditChainHead(Base):
+    __tablename__ = "audit_chain_heads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    last_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
 
@@ -153,6 +169,12 @@ class RawSnapshot(Base):
     content_type: Mapped[str] = mapped_column(String(100), nullable=False)
     payload_reference: Mapped[str] = mapped_column(Text, nullable=False)
     byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload_purged_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    payload_purge_pending_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -689,6 +711,12 @@ class PropertyImport(Base):
     effective_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     raw_payload_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_purged_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    payload_purge_pending_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
     normalized_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rejected_row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

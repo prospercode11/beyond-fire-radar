@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -20,7 +21,7 @@ def run(command: List[str], *, env: Optional[Dict[str, str]] = None) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Beyond Fire Radar developer commands")
     parser.add_argument(
-        "command", choices=["migrate", "api", "api-smoke", "test", "lint", "format"]
+        "command", choices=["migrate", "api", "local", "api-smoke", "test", "lint", "format"]
     )
     args = parser.parse_args()
 
@@ -42,6 +43,44 @@ def main() -> None:
                 "--reload",
             ]
         )
+    elif args.command == "local":
+        run([sys.executable, "-m", "alembic", "-c", "apps/api/alembic.ini", "upgrade", "head"])
+        api = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "app.main:app",
+                "--app-dir",
+                "apps/api",
+                "--host",
+                os.getenv("API_HOST", "127.0.0.1"),
+                "--port",
+                os.getenv("API_PORT", "8000"),
+                "--reload",
+            ],
+            cwd=ROOT,
+        )
+        web = subprocess.Popen(
+            ["npm", "--prefix", "apps/web", "run", "dev"],
+            cwd=ROOT,
+            env={
+                **os.environ,
+                "NEXT_PUBLIC_API_BASE_URL": os.getenv("API_BASE_URL", "http://127.0.0.1:8000"),
+            },
+        )
+        try:
+            return_code = api.wait()
+            if return_code:
+                raise subprocess.CalledProcessError(return_code, api.args)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            for process in (api, web):
+                if process.poll() is None:
+                    process.send_signal(signal.SIGTERM)
+            for process in (api, web):
+                process.wait(timeout=10)
     elif args.command == "api-smoke":
         run([sys.executable, "scripts/api_smoke.py"])
     elif args.command == "test":

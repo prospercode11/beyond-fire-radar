@@ -82,6 +82,15 @@ This ledger records executable evidence for the autonomous v1 objective. Synthet
 - Limitation: real approved outcome labels, held-out improvement, valid calibration, improved top-alert precision, complete error analysis, administrator approval, production serving, PostgreSQL/PostGIS, Redis, production identity/MFA, and external source approval remain open gates.
 - Commit: `7ef5f6f` (`Complete Phase 9 learning infrastructure`).
 
-## Remaining phases
+## Phase 10 — Production hardening and deployment readiness
 
-Phase 10 remains pending and must advance only after the Phase 9 handoff is accepted. Consumer outreach, legal conclusions, invented approvals, and unvalidated model accuracy remain prohibited.
+- Status: complete for the local/staging hardening gate.
+- Scope: secure configuration and trusted hosts, request/upload/archive limits, rate limiting, session lifecycle, audit-chain integrity, structured observability, backup/restore, retention, object-storage adapter, deployment images/configuration, runbooks, dependency review, concurrency/failure/performance checks, and final E2E/browser acceptance.
+- Governance: Sarasota remains manual/file/fixture/replay only; live polling and learned serving are false. No approval, credential, source license, accuracy, damage, coverage, claim-validity, or outreach conclusion is invented.
+- Evidence: final Phase 10 verification contract, migration round-trip through `0022_raw_purge_pending_state`, clean API smoke/replay, dependency audit, focused hardening/failure tests, authenticated production-browser acceptance, final architecture/security/data-integrity/UX/Luna review, and updated handoff.
+- Limitation: Docker/Colima, PostgreSQL/PostGIS, Redis, managed R2, production SSO/MFA, TLS/domain, source approvals, and operator-owned staging recovery remain external gates.
+- Commits: implementation and closure-evidence commits are recorded in `docs/handoffs/phase-10-production-hardening.md` after the final ledger commit.
+
+## Remaining activation gates
+
+No later product phase is started by this release. Consumer outreach, legal conclusions, invented approvals, live polling, Boca/Broadcastify, and unvalidated model accuracy remain prohibited. Activation requires the external checklist and managed-environment recovery exercises in `docs/compliance/external-activation-checklist.md`.

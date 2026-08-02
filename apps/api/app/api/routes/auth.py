@@ -35,13 +35,28 @@ def _user_response(user: User) -> UserResponse:
 
 def _create_session(db: DbSession, user: User) -> TokenResponse:
     raw_token, token_hash = new_session_token()
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=get_settings().session_ttl_hours)
+    now = datetime.now(timezone.utc)
+    settings = get_settings()
+    expires_at = now + timedelta(hours=settings.session_ttl_hours)
+    active_sessions = list(
+        db.scalars(
+            select(SessionToken)
+            .where(SessionToken.user_id == user.id, SessionToken.revoked_at.is_(None))
+            .order_by(SessionToken.created_at, SessionToken.id)
+        ).all()
+    )
+    while len(active_sessions) >= settings.max_active_sessions:
+        oldest = active_sessions.pop(0)
+        oldest.revoked_at = now
+        oldest.replaced_at = now
     db.add(
         SessionToken(
             id=str(uuid4()),
             user_id=user.id,
             token_hash=token_hash,
             expires_at=expires_at,
+            created_at=now,
+            last_used_at=now,
         )
     )
     return TokenResponse(access_token=raw_token, expires_at=expires_at, user=_user_response(user))
@@ -50,13 +65,17 @@ def _create_session(db: DbSession, user: User) -> TokenResponse:
 @router.get("/bootstrap/status", response_model=BootstrapStatus)
 def bootstrap_status(db: DbSession) -> BootstrapStatus:
     count = db.scalar(select(func.count()).select_from(User)) or 0
-    return BootstrapStatus(user_count=count, available=count == 0)
+    return BootstrapStatus(
+        user_count=count, available=count == 0 and get_settings().enable_bootstrap
+    )
 
 
 @router.post("/bootstrap", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def bootstrap(
     credentials: Credentials, db: DbSession, rid: str = Depends(request_id)
 ) -> TokenResponse:
+    if not get_settings().enable_bootstrap:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="bootstrap is disabled")
     count = db.scalar(select(func.count()).select_from(User)) or 0
     settings = get_settings()
     if count != 0:

@@ -1,6 +1,6 @@
 # Data dictionary
 
-## Phase 1 through Phase 8 tables
+## Phase 1 through Phase 10 tables
 
 Phase 6 adds no database tables or source fields. The dashboard reads governed APIs and must not create inferred records, map points, property candidates, or score facts in the browser. Phases 7 and 8 add internal workflow/outcome tables; these are not external-source evidence and do not enable consumer outreach.
 
@@ -8,11 +8,12 @@ Phase 6 adds no database tables or source fields. The dashboard reads governed A
 | --- | --- | --- |
 | `users` | Internal identities | Password hashes only; no plaintext credential storage |
 | `roles` / `user_roles` | Server-side RBAC | Role changes must be audited when provisioning is added |
-| `sessions` | Expiring database-backed bearer sessions | Store token hash, never raw token; revoke before production use |
-| `audit_events` | Immutable security/workflow event record | Actor, action, resource, request ID, metadata, timestamp |
+| `sessions` | Expiring database-backed bearer sessions | Store token hash, never raw token; expiry, idle use, revocation, and replacement timestamps are server-managed |
+| `audit_events` | Immutable security/workflow event record | Actor, action, resource, request ID, metadata, timestamp, sequence, previous hash, and event hash; chain verification is required |
+| `audit_chain_heads` | Current tamper-evident audit-chain head | Single chain sequence/hash updated with each event; mismatch blocks trust in the audit stream |
 | `providers` | Provider contract and authority metadata | Limitations and authorized-use status are explicit |
 | `provider_retrievals` | One snapshot retrieval/import attempt | Hash, parser/schema versions, counts, failure/circuit state, retrieval/effective time, acquisition mode, authorization basis |
-| `raw_snapshots` | Content-addressed raw payload reference | Unique retrieval and content hash; never overwrite |
+| `raw_snapshots` | Content-addressed raw payload reference | Unique retrieval and content hash; never overwrite; retention may mark `payload_purge_pending_at` before deletion and tombstone bytes with `payload_purged_at` while retaining provenance |
 | `provider_health` | Current operational health summary | Last status, failure count, circuit state, and schema-alert count |
 | `import_jobs` | Idempotent manual/import job envelope | Provider-scoped key, request hash, retrieval reference, and creator |
 | `parser_versions` | Registered parser/schema contract | Provider, active version, expected fields, required fields |
@@ -31,7 +32,7 @@ Phase 6 adds no database tables or source fields. The dashboard reads governed A
 | `responding_agencies` / `responding_stations` | Incident-level responder evidence derived from source observations | Incident, immutable observation, source agency/station, observed time; unique per source observation |
 | `incident_dispositions` | Reserved disposition evidence relationship for manual/source-supported disposition records | Incident, optional source observation, source text, disposition, timestamp, reviewer identity; no disposition is inferred in Phase 3 |
 | `property_mapping_profiles` | Reusable provider-specific manual field mappings | Provider, named mapping, version, creator, timestamps; changes are not implicit |
-| `property_imports` | Versioned CSV/XLSX/ZIP property import envelope | Provider-scoped idempotency/content hash, source/parser/schema versions, acquisition/authorization, effective/retrieved times, raw payload reference, counts, current lineage, rollback status |
+| `property_imports` | Versioned CSV/XLSX/ZIP property import envelope | Provider-scoped idempotency/content hash, source/parser/schema versions, acquisition/authorization, effective/retrieved times, raw payload reference, counts, current lineage, rollback status, and failure-safe `payload_purge_pending_at`/`payload_purged_at` retention state |
 | `property_import_errors` | Property parser/schema/row failure visibility | Import, row, stable code/message, raw row payload |
 | `property_source_rows` | Immutable property source-row preservation | Import, file, row number/hash, raw payload, source parcel ID, normalized fields, acceptance/error status |
 | `parcels` | Current provider-scoped parcel projection | Current import/source-row links, original/normalized address components, property fields, active/removal status, data quality |

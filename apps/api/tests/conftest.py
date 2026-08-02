@@ -7,6 +7,7 @@ import pytest
 from app.db import Base, get_db
 from app.main import app
 from app.providers.registry import fixture_is_well_formed
+from app.rate_limit import limiter
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -14,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 
 @pytest.fixture()
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    limiter.reset()
     database_url = f"sqlite:///{tmp_path / 'test.db'}"
     test_engine = create_engine(database_url, connect_args={"check_same_thread": False})
     TestingSessionLocal = sessionmaker(
@@ -43,6 +45,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+    limiter.reset()
     get_settings.cache_clear()
     test_engine.dispose()
 

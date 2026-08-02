@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Uplo
 from sqlalchemy import select
 
 from app.audit import record_audit
+from app.config import get_settings
 from app.dependencies import CurrentUser, DbSession, IncidentEditor, request_id
 from app.models import (
     CanonicalIncident,
@@ -35,6 +36,7 @@ from app.schemas import (
     WorkflowNoteCreateRequest,
     WorkflowNoteResponse,
 )
+from app.uploads import read_limited_upload
 from app.workflow.service import (
     add_note,
     assign_incident,
@@ -393,9 +395,12 @@ async def import_clients(
     ],
     rid: str = Depends(request_id),
 ) -> ClientImportResponse:
-    payload = await file.read()
-    if len(payload) > 5_000_000:
-        raise HTTPException(status_code=413, detail="client import exceeds configured size limit")
+    filename, payload = await read_limited_upload(
+        file,
+        maximum_bytes=get_settings().max_client_import_bytes,
+        fallback_filename="clients.csv",
+        allowed_suffixes={".csv"},
+    )
     content_hash = hashlib.sha256(payload).hexdigest()
     existing = db.scalar(
         select(ClientImport).where(ClientImport.idempotency_key == idempotency_key)
@@ -430,7 +435,7 @@ async def import_clients(
         raise HTTPException(status_code=422, detail="client import must be UTF-8 CSV") from exc
     client_import = ClientImport(
         id=str(uuid4()),
-        source_filename=file.filename or "clients.csv",
+        source_filename=filename,
         idempotency_key=idempotency_key,
         content_hash=content_hash,
         status="imported",

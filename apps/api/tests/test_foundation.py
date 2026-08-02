@@ -9,8 +9,10 @@ def test_health_explicitly_reports_phase_and_live_polling_state(client: TestClie
     assert response.json() == {
         "status": "ok",
         "service": "Beyond Fire Radar",
+        "environment": "development",
         "live_polling_enabled": False,
-        "phase": "9-learning-infrastructure",
+        "learned_model_serving_enabled": False,
+        "phase": "10-production-hardening",
     }
 
 

@@ -40,6 +40,7 @@ from app.schemas import (
     ProviderResponse,
     SchemaAlertResponse,
 )
+from app.uploads import read_limited_upload
 
 router = APIRouter(prefix="/api/v1/providers", tags=["providers"])
 
@@ -142,6 +143,10 @@ def parser_compare(
         raise HTTPException(status_code=404, detail="provider retrieval not found")
     try:
         result = DispatchIngestionService(get_settings()).compare(db, retrieval, parser_version)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=410, detail="raw snapshot payload was purged or is unavailable"
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return ParserComparisonResponse(
@@ -178,24 +183,18 @@ async def upload_snapshot(
     provider = db.get(Provider, provider_id)
     if provider is None:
         raise HTTPException(status_code=404, detail="provider not found")
-    chunks = []
-    total = 0
-    maximum = get_settings().max_snapshot_bytes
-    while True:
-        chunk = await file.read(1024 * 1024)
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > maximum:
-            raise HTTPException(status_code=413, detail="snapshot exceeds configured size limit")
-        chunks.append(chunk)
-    payload = b"".join(chunks)
+    filename, payload = await read_limited_upload(
+        file,
+        maximum_bytes=get_settings().max_snapshot_bytes,
+        fallback_filename="snapshot.upload",
+        allowed_suffixes={".csv", ".html", ".htm", ".json"},
+    )
     try:
         report = DispatchIngestionService(get_settings()).ingest(
             db,
             provider=provider,
             user_id=user.id,
-            filename=file.filename or "snapshot.upload",
+            filename=filename,
             content_type=file.content_type,
             payload=payload,
             idempotency_key=idempotency_key,
@@ -317,6 +316,10 @@ def raw_snapshot(retrieval_id: str, user: CurrentUser, db: DbSession) -> Respons
     raw_snapshot = db.scalar(select(RawSnapshot).where(RawSnapshot.retrieval_id == retrieval_id))
     if raw_snapshot is None:
         raise HTTPException(status_code=404, detail="raw snapshot not found")
+    if raw_snapshot.payload_purged_at is not None:
+        raise HTTPException(
+            status_code=410, detail="raw snapshot payload was purged by retention policy"
+        )
     try:
         payload = DispatchIngestionService(get_settings()).store.read(
             raw_snapshot.payload_reference

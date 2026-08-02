@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+*.pyc
+data
+apps/web/node_modules
+apps/web/.next
+*.db
+*.sqlite
+.env
+.env.*
+!.env.example

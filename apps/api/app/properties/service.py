@@ -34,7 +34,7 @@ from app.properties.importers import (
     PropertyParseResult,
     parse_property_file,
 )
-from app.providers.storage import LocalSnapshotStore
+from app.providers.storage import build_snapshot_store
 
 
 class PropertyImportConflict(ValueError):
@@ -64,6 +64,7 @@ class PropertyImportReport:
     effective_at: Optional[datetime]
     retrieved_at: Optional[datetime]
     raw_payload_reference: Optional[str]
+    payload_purged_at: Optional[datetime]
 
 
 def _report(
@@ -103,6 +104,7 @@ def _report(
         effective_at=import_record.effective_at,
         retrieved_at=import_record.retrieved_at,
         raw_payload_reference=import_record.raw_payload_reference,
+        payload_purged_at=import_record.payload_purged_at,
     )
 
 
@@ -192,7 +194,7 @@ def _source_raw_value(row: NormalizedPropertyRow, source_header: str) -> Optiona
 class PropertyImportService:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.store = LocalSnapshotStore(Path(settings.raw_snapshot_dir))
+        self.store = build_snapshot_store(settings)
 
     @staticmethod
     def preview(
@@ -300,7 +302,14 @@ class PropertyImportService:
         )
         db.add(import_record)
         db.flush()
-        parsed = parse_property_file(payload, content_type, filename, resolved_mapping)
+        parsed = parse_property_file(
+            payload,
+            content_type,
+            filename,
+            resolved_mapping,
+            max_archive_members=self.settings.max_archive_members,
+            max_archive_uncompressed_bytes=self.settings.max_archive_uncompressed_bytes,
+        )
         seen_parcels: set[str] = set()
         accepted_rows: list[tuple[NormalizedPropertyRow, PropertySourceRow]] = []
         for row in parsed.rows:

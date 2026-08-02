@@ -104,8 +104,31 @@ def _cell_column(cell_ref: str) -> int:
     return result
 
 
-def _xlsx_rows(payload: bytes) -> tuple[list[str], list[dict[str, Any]]]:
+def _validate_archive(
+    archive: zipfile.ZipFile, *, max_members: int, max_uncompressed_bytes: int
+) -> None:
+    infos = archive.infolist()
+    if len(infos) > max_members:
+        raise ValueError("archive contains too many members")
+    total_size = 0
+    for info in infos:
+        member = PurePosixPath(info.filename)
+        if member.is_absolute() or ".." in member.parts:
+            raise ValueError("archive contains an unsafe member path")
+        total_size += info.file_size
+        if total_size > max_uncompressed_bytes:
+            raise ValueError("archive uncompressed size exceeds configured limit")
+
+
+def _xlsx_rows(
+    payload: bytes, *, max_archive_members: int, max_archive_uncompressed_bytes: int
+) -> tuple[list[str], list[dict[str, Any]]]:
     with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        _validate_archive(
+            archive,
+            max_members=max_archive_members,
+            max_uncompressed_bytes=max_archive_uncompressed_bytes,
+        )
         names = set(archive.namelist())
         shared: list[str] = []
         if "xl/sharedStrings.xml" in names:
@@ -171,7 +194,12 @@ def _csv_rows(payload: bytes) -> tuple[list[str], list[dict[str, Any]]]:
 
 
 def _payload_rows(
-    payload: bytes, filename: str, content_type: Optional[str]
+    payload: bytes,
+    filename: str,
+    content_type: Optional[str],
+    *,
+    max_archive_members: int,
+    max_archive_uncompressed_bytes: int,
 ) -> tuple[str, list[str], list[tuple[str, dict[str, Any]]]]:
     extension = PurePosixPath(filename.lower()).suffix
     content = (content_type or "").lower()
@@ -179,6 +207,11 @@ def _payload_rows(
         combined_headers: list[str] = []
         combined_rows: list[tuple[str, dict[str, Any]]] = []
         with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            _validate_archive(
+                archive,
+                max_members=max_archive_members,
+                max_uncompressed_bytes=max_archive_uncompressed_bytes,
+            )
             members = [name for name in sorted(archive.namelist()) if not name.endswith("/")]
             supported = [
                 name for name in members if PurePosixPath(name.lower()).suffix in {".csv", ".xlsx"}
@@ -191,7 +224,11 @@ def _payload_rows(
                 headers, rows = (
                     _csv_rows(member_payload)
                     if member_extension == ".csv"
-                    else _xlsx_rows(member_payload)
+                    else _xlsx_rows(
+                        member_payload,
+                        max_archive_members=max_archive_members,
+                        max_archive_uncompressed_bytes=max_archive_uncompressed_bytes,
+                    )
                 )
                 member_mapping = _auto_mapping(headers)
                 for canonical, _source_header in member_mapping.items():
@@ -207,7 +244,11 @@ def _payload_rows(
                     combined_rows.append((member, mapped_row))
         return "zip", combined_headers, combined_rows
     if extension == ".xlsx" or "spreadsheet" in content or "excel" in content:
-        headers, rows = _xlsx_rows(payload)
+        headers, rows = _xlsx_rows(
+            payload,
+            max_archive_members=max_archive_members,
+            max_archive_uncompressed_bytes=max_archive_uncompressed_bytes,
+        )
         return "xlsx", headers, [(filename, row) for row in rows]
     if extension == ".csv" or "csv" in content or "text/plain" in content:
         headers, rows = _csv_rows(payload)
@@ -263,9 +304,17 @@ def parse_property_file(
     content_type: Optional[str],
     filename: str,
     mapping: Optional[dict[str, str]] = None,
+    max_archive_members: int = 100,
+    max_archive_uncompressed_bytes: int = 100_000_000,
 ) -> PropertyParseResult:
     try:
-        format_name, headers, source_rows = _payload_rows(payload, filename, content_type)
+        format_name, headers, source_rows = _payload_rows(
+            payload,
+            filename,
+            content_type,
+            max_archive_members=max_archive_members,
+            max_archive_uncompressed_bytes=max_archive_uncompressed_bytes,
+        )
     except (ValueError, zipfile.BadZipFile, ElementTree.ParseError) as exc:
         return PropertyParseResult(
             format="unknown",

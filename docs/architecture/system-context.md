@@ -10,6 +10,8 @@ flowchart LR
   E --> API[FastAPI modular monolith]
   API --> WEB[Next.js internal web client]
   API --> AUDIT[(Immutable audit events)]
+  API --> OBS[Structured logs and metrics]
+  API --> OBJ[(Local or S3/R2 raw payload store)]
   API -. future jobs .-> REDIS[(Redis)]
   LEGAL[Legal approvals and feature flags] --> API
   REVIEW[Authorized human reviewers] --> WEB
@@ -67,4 +69,4 @@ sequenceDiagram
   A-->>W: API posture or source-preserving domain state; unavailable/empty states remain explicit
 ```
 
-Manual snapshot ingestion and Sarasota-only incident processing are the Phase 2/3 boundary. Phase 4 adds manual/file property workflows only. Phase 5 adds a non-probability evidence ranking over already imported Sarasota records; it does not add a source. Phase 6 adds a presentation-only internal dashboard with explicit loading, API-unavailable, empty, freshness, uncertainty, and human-review states; it does not add a live map feed or fabricate domain records. Dispatch retrievals carry `manual_snapshot` or `synthetic_fixture` provenance; official property imports require an explicit authorization attestation and synthetic fixture imports are labeled separately. Live-collected input and automated official property retrieval remain disabled. The external approval gate is not removed or bypassed. No Boca radio, Broadcastify, empirical model, production dashboard deployment, or outreach source is in scope.
+Manual snapshot ingestion and Sarasota-only incident processing are the Phase 2/3 boundary. Phase 4 adds manual/file property workflows only. Phase 5 adds a non-probability evidence ranking over already imported Sarasota records; it does not add a source. Phase 6 adds a presentation-only internal dashboard with explicit loading, API-unavailable, empty, freshness, uncertainty, and human-review states; it does not add a live map feed or fabricate domain records. Phase 7/8/9 add internal workflow, outcomes, analytics, and inactive learning contracts. Phase 10 adds deployment/operations controls around the same data flow: local or S3/R2 raw storage, chained audit events, health/readiness, metrics, retention tombstones, backup/restore, and migration release commands. Dispatch retrievals carry `manual_snapshot` or `synthetic_fixture` provenance; official property imports require an explicit authorization attestation and synthetic fixture imports are labeled separately. Live-collected input and automated official property retrieval remain disabled. The external approval gate is not removed or bypassed. No Boca radio, Broadcastify, empirical model, managed production activation, or outreach source is in scope.

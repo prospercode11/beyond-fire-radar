@@ -1,14 +1,14 @@
 # Current state
 
-Updated: 2026-08-02 after Phase 9 verification
-Scope: Phase 0 through Phase 9 only
+Updated: 2026-08-02 after Phase 10 verification
+Scope: Phase 0 through Phase 10 v1 closure
 
 ## Implemented
 
 - Repository policy in `AGENTS.md`.
 - Architecture/product/modeling/compliance/data/testing documents.
 - FastAPI API under `apps/api`.
-- SQLAlchemy models and migration-owned schema through `0018_learning_control_actions`.
+- SQLAlchemy models and migration-owned schema through `0022_raw_purge_pending_state`.
 - SQLite local mode; PostgreSQL/PostGIS and Redis service definition.
 - One-time configured admin bootstrap, password verification, expiring bearer sessions, and server-side role checks.
 - Provider registry for a synthetic fixture and a fail-closed Sarasota live provider.
@@ -45,17 +45,20 @@ Scope: Phase 0 through Phase 9 only
 - Phase 8 Outcomes/Analytics workspace view displays saved manifests, dispatch/property source counts, metric denominators/warnings, and blocked Model Lab readiness. No probability, legal approval, damage, coverage, claim-validity, or outreach conclusion is shown.
 - Phase 9 adds versioned feature/label contracts, immutable training-dataset snapshots, incident-grouped chronological splits, manifest integrity/leakage checks, a dependency-light logistic baseline, a blocked boosted-model adapter boundary, reliability-bin calibration, uncertainty/selective-prediction metrics, model cards, model-release lineage, idempotent model controls, offline replay, drift reporting, rollback mechanics, and explicit administrator/serving gates.
 - Phase 9 Model Lab posture is visible in the authenticated workspace. The current policy is rule-based fallback; no learned model is active, no probability is displayed, and mechanics-only or synthetic data cannot support an accuracy claim.
+- Phase 10 adds trusted hosts and secure production settings, bounded request/upload/archive limits, Redis-required production rate limiting, session idle/replacement controls, security headers, structured request logs, bounded Prometheus metrics, readiness checks, operations status, and tamper-evident audit-chain verification.
+- Phase 10 adds SQLite backup/verify/restore bundles that include raw payloads, PostgreSQL dump/restore guidance, an immutable S3/R2 snapshot adapter, dry-run-first raw-payload retention for dispatch and property imports with audited failure-safe tombstones, production Dockerfiles, Render release/migration configuration, environment templates, deployment/runbook/access-review documents, and dependency-audit policy.
+- Phase 10 tests cover concurrent limiter behavior, latency budget, object-storage tamper detection, upload/archive boundaries, secure production configuration, audit tampering, backup/restore with raw-payload hash verification, pending-purge retry behavior, API smoke, migration round-trip, final E2E mechanics, and browser acceptance.
 
 ## Explicitly not implemented
 
-Live Sarasota polling, cross-source deduplication, GIS/permit imports, learned-model activation, empirical accuracy claims, live GIS/map data, production dashboard deployment, email/SMS/phone notifications, and consumer outreach.
+Live Sarasota polling, cross-source deduplication, GIS/permit imports, learned-model activation, empirical accuracy claims, live GIS/map data, managed production deployment activation, production SSO/MFA, email/SMS/phone notifications, and consumer outreach.
 
 ## Environment evidence
 
 The host has Docker CLI but its configured Colima daemon is not running, and the Docker Compose plugin is not installed. Therefore the Compose definitions are present but PostgreSQL/PostGIS/Redis integration could not be truthfully claimed as executed in this environment. SQLite migration and application tests are the runnable local path. The parser also accepted a one-time current HTML response from the official Sarasota dispatch page for shape verification; that is not an authorization claim or an activated polling integration.
 
-The external-source approval gate remains intact. Dispatch processing accepts only retrievals explicitly labeled `manual_snapshot` or `synthetic_fixture`; property processing accepts manual/file workflows with an explicit authorization attestation for the official provider and labels synthetic fixture imports separately. No live polling is enabled or implied, no legal approval is invented, and acquisition mode is returned in import, retrieval, processing, incident, parcel, and match evidence. Internal client-roster files are explicitly labeled internal manual reference data and are not approval evidence. The authenticated browser reads through the API and does not bypass source gates. Phase 7 alerts require explicitly authorized manual dispatch evidence, eligible score hard gates, resolved property evidence, and no suppression; in-app delivery is the only enabled channel. PostgreSQL/PostGIS and Redis execution remains unavailable on this host.
+The external-source approval gate remains intact. Dispatch processing accepts only retrievals explicitly labeled `manual_snapshot` or `synthetic_fixture`; property processing accepts manual/file workflows with an explicit authorization attestation for the official provider and labels synthetic fixture imports separately. No live polling is enabled or implied, no legal approval is invented, and acquisition mode is returned in import, retrieval, processing, incident, parcel, and match evidence. Internal client-roster files are explicitly labeled internal manual reference data and are not approval evidence. The authenticated browser reads through the API and does not bypass source gates. Phase 7 alerts require explicitly authorized manual dispatch evidence, eligible score hard gates, resolved property evidence, and no suppression; in-app delivery is the only enabled channel. Production requires PostgreSQL/PostGIS, Redis, S3/R2, HTTPS, explicit hosts, managed identity/MFA, and deployment-owner recovery exercises; those services and approvals remain unavailable or external on this host.
 
 ## Next controlled step
 
-Phase 9 is complete for the inactive learning foundation. The next controlled step is Phase 10 production hardening, but it must not activate learned serving or bypass the external-source approval boundary. Real approved outcomes, held-out improvement, valid calibration, error analysis, administrator approval, and the serving feature flag remain open gates.
+Phase 10 is complete as a local/staging hardening and deployment-readiness gate. Final evidence is recorded in `docs/handoffs/phase-10-production-hardening.md` and `docs/reviews/phase-10-production-hardening-review.md`. The next step is operator-owned environment provisioning and approval review, not another product phase: supply written source approvals, provision isolated managed services and identity/MFA, run staging restore/readiness/browser exercises, and re-run the dependency audit. Keep live polling, learned serving, official property automation, external notification, and outreach disabled until their separate gates pass.

@@ -48,6 +48,7 @@ from app.schemas import (
     PropertyMatchRunRequest,
     PropertyMatchRunResponse,
 )
+from app.uploads import read_limited_upload
 
 import_router = APIRouter(prefix="/api/v1/properties", tags=["properties"])
 match_router = APIRouter(prefix="/api/v1/incidents", tags=["property-resolution"])
@@ -123,6 +124,7 @@ def _import_record_response(item: PropertyImport) -> PropertyImportResponse:
             effective_at=item.effective_at,
             retrieved_at=item.retrieved_at,
             raw_payload_reference=item.raw_payload_reference,
+            payload_purged_at=item.payload_purged_at,
         )
     )
 
@@ -204,14 +206,19 @@ async def preview_property_import(
     mapping_json: Annotated[Optional[str], Form()] = None,
     mapping_profile_id: Annotated[Optional[str], Form()] = None,
 ) -> PropertyImportPreviewResponse:
-    payload = await file.read()
+    filename, payload = await read_limited_upload(
+        file,
+        maximum_bytes=get_settings().max_property_import_bytes,
+        fallback_filename="property.import.csv",
+        allowed_suffixes={".csv", ".xlsx", ".zip"},
+    )
     mapping = _mapping_from_json(mapping_json) or _profile_mapping(
         db, provider_id, mapping_profile_id
     )
     parsed = PropertyImportService(get_settings()).preview(
         payload,
         content_type=file.content_type,
-        filename=file.filename or "property.import",
+        filename=filename,
         mapping=mapping,
     )
     return _preview_response(parsed)
@@ -234,7 +241,12 @@ async def import_property_file(
     authorized_snapshot: Annotated[bool, Form()] = False,
     rid: str = Depends(request_id),
 ) -> PropertyImportResponse:
-    payload = await file.read()
+    filename, payload = await read_limited_upload(
+        file,
+        maximum_bytes=get_settings().max_property_import_bytes,
+        fallback_filename="property.import.csv",
+        allowed_suffixes={".csv", ".xlsx", ".zip"},
+    )
     provider = db.get(Provider, provider_id)
     if provider is None:
         raise HTTPException(status_code=404, detail="property provider not found")
@@ -246,7 +258,7 @@ async def import_property_file(
             db,
             provider_id=provider_id,
             user_id=user.id,
-            filename=file.filename or "property.import",
+            filename=filename,
             content_type=file.content_type,
             payload=payload,
             source_version=source_version,

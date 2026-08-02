@@ -153,7 +153,26 @@ class AuditResponse(BaseModel):
     resource_id: Optional[str]
     request_id: str
     metadata: Dict[str, Any]
+    sequence: int
+    previous_hash: str
+    event_hash: str
     created_at: datetime
+
+
+class AuditIntegrityResponse(BaseModel):
+    valid: bool
+    event_count: int
+    first_invalid_sequence: Optional[int]
+    reason: Optional[str]
+
+
+class OperationsStatusResponse(BaseModel):
+    database: str
+    pending_notification_jobs: int
+    oldest_pending_notification_at: Optional[datetime]
+    provider_circuit_states: Dict[str, str]
+    live_polling_enabled: bool
+    learned_model_serving_enabled: bool
 
 
 class IncidentProcessResponse(BaseModel):
@@ -274,6 +293,7 @@ class PropertyImportResponse(BaseModel):
     effective_at: Optional[datetime] = None
     retrieved_at: Optional[datetime] = None
     raw_payload_reference: Optional[str] = None
+    payload_purged_at: Optional[datetime] = None
 
 
 class PropertyImportErrorResponse(BaseModel):

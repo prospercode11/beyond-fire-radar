@@ -4,7 +4,6 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
@@ -35,7 +34,7 @@ from app.providers.parsing import (
     ParseResult,
     parse_snapshot,
 )
-from app.providers.storage import LocalSnapshotStore, SnapshotStore
+from app.providers.storage import SnapshotStore, build_snapshot_store
 
 MAX_FAILURES_BEFORE_CIRCUIT_OPEN = 3
 
@@ -166,7 +165,7 @@ def seed_parser_versions(db: Session) -> None:
 class DispatchIngestionService:
     def __init__(self, settings: Settings, store: Optional[SnapshotStore] = None) -> None:
         self.settings = settings
-        self.store = store or LocalSnapshotStore(Path(settings.raw_snapshot_dir))
+        self.store = store or build_snapshot_store(settings)
 
     def ingest(
         self,

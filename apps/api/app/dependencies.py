@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Annotated, Optional
 from uuid import uuid4
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.db import get_db
 from app.models import SessionToken, User
 from app.security import hash_session_token
@@ -15,8 +17,13 @@ from app.security import hash_session_token
 DbSession = Annotated[Session, Depends(get_db)]
 
 
-def request_id(x_request_id: Annotated[Optional[str], Header()] = None) -> str:
-    return x_request_id or str(uuid4())
+def request_id(request: Request, x_request_id: Annotated[Optional[str], Header()] = None) -> str:
+    state_request_id = getattr(request.state, "request_id", None)
+    if state_request_id:
+        return state_request_id
+    if x_request_id and re.fullmatch(r"[A-Za-z0-9._:-]{1,64}", x_request_id):
+        return x_request_id
+    return str(uuid4())
 
 
 def get_current_user(
@@ -27,7 +34,12 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required"
         )
-    token_hash = hash_session_token(authorization[7:].strip())
+    token = authorization[7:].strip()
+    if not token or len(token) > 512:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required"
+        )
+    token_hash = hash_session_token(token)
     session = db.scalar(
         select(SessionToken).where(
             SessionToken.token_hash == token_hash,
@@ -35,13 +47,26 @@ def get_current_user(
         )
     )
     now = datetime.now(timezone.utc)
-    if session is None or session.expires_at.replace(tzinfo=timezone.utc) <= now:
+    settings = get_settings()
+    expires_at = session.expires_at.replace(tzinfo=timezone.utc) if session else now
+    last_used_at = (
+        session.last_used_at.replace(tzinfo=timezone.utc)
+        if session is not None and session.last_used_at is not None
+        else None
+    )
+    idle_expired = (
+        last_used_at is not None
+        and (now - last_used_at).total_seconds() > settings.session_idle_ttl_hours * 3600
+    )
+    if session is None or session.replaced_at is not None or expires_at <= now or idle_expired:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="session expired or invalid"
         )
     user = db.get(User, session.user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user inactive")
+    session.last_used_at = now
+    db.commit()
     return user
 
 

@@ -4,7 +4,7 @@ Beyond Fire Radar is an internal, research-only property-loss intelligence syste
 
 ## Current scope
 
-Phase 0 through Phase 9 — Sarasota incident intelligence, property resolution, transparent scoring foundation, internal workflow, outcomes/analytics, and inactive learned-model infrastructure — are complete in this repository:
+Phase 0 through Phase 10 — Sarasota incident intelligence, property resolution, transparent scoring foundation, internal workflow, outcomes/analytics, inactive learned-model infrastructure, and production-hardening readiness — are complete in this repository:
 
 - Architecture, product, modeling, compliance, data, testing, execution, and handoff documents.
 - FastAPI modular-monolith API with SQLAlchemy and Alembic migrations.
@@ -18,8 +18,9 @@ Phase 0 through Phase 9 — Sarasota incident intelligence, property resolution,
 - Responsive Next.js TypeScript dashboard with Command Center, Incident Stream, Opportunities, Data Health, Settings, review queue, source posture, incident-map empty state, evidence workbench, property context, and explicit loading/error/empty states.
 - Authenticated internal alerts, assignments, append-only notes, in-app-only notification controls, and existing-client reference import with suppression safeguards.
 - Append-only reviewer outcome labels/events, source-provenance-bound evaluation manifests, directional metrics with denominators/warnings, and a blocked Model Lab readiness view. Reports do not make accuracy, calibration, damage, coverage, claim-validity, legal-approval, or conversion claims.
+- Production-hardening foundation: trusted hosts, secure environment validation, upload/archive/request limits, rate limiting, session lifecycle controls, tamper-evident audit-chain verification, structured logs, bounded metrics, readiness/operations endpoints, backup/restore, retention tombstones, S3/R2 adapter, non-root Docker images, Render migration release configuration, runbooks, and deployment/access-review checklists.
 
-Phase 4 provides a manual/file prototype for Sarasota property imports and explainable address-to-parcel resolution. Phase 5 adds a versioned, explainable, non-probability opportunity-ranking foundation with feature provenance, hard gates, abstention, review bands, as-of scoring, overrides, rescore history, and rollback through authenticated APIs. Phase 6 adds an authenticated internal dashboard foundation; Phase 7 adds internal-only workflow; Phase 8 adds manual outcome capture and reproducible directional analytics; Phase 9 adds versioned learning contracts, manifest-bound datasets, leakage checks, inactive baseline training, replay, drift, rollback, and explicit approval/serving gates. Official property-source approval, live polling, learned model activation, production dashboard deployment, Boca/Broadcastify, and outreach remain gated; repository fixtures are not real-world accuracy evidence.
+Phase 4 provides a manual/file prototype for Sarasota property imports and explainable address-to-parcel resolution. Phase 5 adds a versioned, explainable, non-probability opportunity-ranking foundation with feature provenance, hard gates, abstention, review bands, as-of scoring, overrides, rescore history, and rollback through authenticated APIs. Phase 6 adds an authenticated internal dashboard foundation; Phase 7 adds internal-only workflow; Phase 8 adds manual outcome capture and reproducible directional analytics; Phase 9 adds versioned learning contracts, manifest-bound datasets, leakage checks, inactive baseline training, replay, drift, rollback, and explicit approval/serving gates. Phase 10 adds local/staging hardening and deployment readiness. Official property-source approval, live polling, learned model activation, managed production deployment, Boca/Broadcastify, and outreach remain gated; repository fixtures are not accuracy evidence.
 
 ## Local setup
 
@@ -31,16 +32,10 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e '.[test,quality,postgres]'
-python scripts/dev.py migrate
-python scripts/dev.py api
+python scripts/dev.py local
 ```
 
-In another terminal:
-
-```bash
-npm --prefix apps/web install
-npm --prefix apps/web run dev
-```
+`python scripts/dev.py local` runs the migration, API, and web development server together after dependencies are installed.
 
 Open [http://localhost:3000](http://localhost:3000). The API is available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
@@ -60,7 +55,7 @@ Run the required checks from the repository root:
 ./scripts/verify.sh
 ```
 
-Individual commands are available through `python scripts/dev.py --help`. The CI workflow runs formatting checks, linting, type checking, unit/integration tests, the API smoke test, and the web production build.
+Individual commands are available through `python scripts/dev.py --help`. The CI workflow runs formatting checks, linting, type checking, unit/integration tests, the API smoke test, and the web production build. The Phase 10 dependency scan is `./scripts/dependency_audit.sh`; backup/restore and retention commands are documented in `docs/operations/`.
 
 ## PostgreSQL/PostGIS and Redis
 
