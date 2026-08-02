@@ -53,7 +53,7 @@ This ledger records executable evidence for the autonomous v1 objective. Synthet
 - Governance: Sarasota County manual snapshots remain the only displayed source posture; live polling is visibly disabled; the browser does not fabricate incidents, map points, property candidates, scores, approvals, or legal status. Provisional ranking language remains non-probabilistic and human-review-only.
 - Evidence: Next lint/build, repository verification contract, migration check, clean isolated API smoke, desktop/mobile browser inspection, keyboard navigation, required surface checks, and no-horizontal-overflow check. Independent Luna review is recorded with no unresolved critical/high findings.
 - Limitation: the map has no live GIS feed, the shell has no authenticated domain-data workflow yet, and production dashboard deployment, PostgreSQL/PostGIS, Redis, and external-source approvals remain open.
-- Commit: to be recorded after the final verified Phase 6 commit.
+- Commit: `b4edd71` (`Complete Phase 6 dashboard foundation`).
 
 ## Remaining phases
 
