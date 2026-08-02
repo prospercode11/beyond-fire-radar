@@ -20,7 +20,9 @@ The current local authorization basis is `explicit_user_permission`, supplied by
 
 The real endpoint was retrieved and parsed successfully: 57 normalized source rows and no parser issues were observed during the activation check. A database-backed live poll completed with retrieval and processing references. Repeated live retrieval/processing kept the current local canonical incident count stable at 60, demonstrating idempotency for the observed Sarasota snapshot sequence without making any real-world accuracy claim.
 
-The browser now reads `/healthz` and displays the actual runtime state, including `Enabled · every 15 minutes`, while preserving the approval-gated language. The test server is available at [http://127.0.0.1:3021/](http://127.0.0.1:3021/) with the API at [http://127.0.0.1:8000/healthz](http://127.0.0.1:8000/healthz).
+After the web proxy/runtime correction, the scheduled worker completed another real cycle at 2026-08-02 17:40:51 UTC, exactly 900 seconds after the prior 17:25:50 UTC cycle, with 56 normalized rows, `live_poll` raw/processing provenance, a completed lease, zero failures, and a closed circuit.
+
+The standalone web server defaults to a same-origin `/api-backend` proxy for local API access because the in-app browser blocks direct local cross-port navigation. The browser now reads the proxied `/healthz` response and displays the actual runtime state, including `Enabled · every 15 minutes`, while preserving the approval-gated language. The test server is available at [http://127.0.0.1:3021/](http://127.0.0.1:3021/) with the direct API health endpoint at [http://127.0.0.1:8000/healthz](http://127.0.0.1:8000/healthz).
 
 ## Final verification
 
@@ -29,8 +31,8 @@ The browser now reads `/healthz` and displays the actual runtime state, includin
 - `PATH="$PWD/.venv/bin:$PATH" API_BASE_URL=http://127.0.0.1:8000 python scripts/dev.py api-smoke`: passed.
 - `PATH="$PWD/.venv/bin:$PATH" API_BASE_URL=http://127.0.0.1:8000 python scripts/e2e_acceptance.py`: passed.
 - `/healthz`: `live_polling_enabled=true`, `live_polling_worker_enabled=true`, `live_polling_interval_seconds=900`.
-- Official Sarasota provider health: last status `imported`, failure count `0`, circuit `closed`; latest observed live retrieval contained 57 normalized rows.
-- Authenticated browser acceptance: 60 canonical incidents, current source freshness, mixed live/manual provenance, no error banner, and `Enabled · every 15 minutes`.
+- Official Sarasota provider health: last status `imported`, failure count `0`, circuit `closed`; latest observed live retrieval contained 56 normalized rows.
+- Authenticated browser acceptance after the proxy correction: 60 canonical incidents, current source freshness, mixed live/manual provenance, no error banner, and `Enabled · every 15 minutes`.
 
 ## Required commands
 

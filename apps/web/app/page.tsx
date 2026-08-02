@@ -341,7 +341,7 @@ const navigation: { id: View; label: string; detail: string; icon: IconName }[] 
   { id: "settings", label: "Settings", detail: "Governance", icon: "sliders" },
 ];
 
-const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api-backend";
 
 function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, ReactNode> = {
@@ -504,12 +504,14 @@ function Workspace({ token, onLogout }: { token: string; onLogout: () => void })
         request<Opportunity[]>("/api/v1/opportunities?limit=500"),
         request<SystemHealth>("/healthz"),
       ]);
+      if (requestId !== loadRequestRef.current) return;
       setUser(null); setProviders(providerResult.providers); setIncidents(incidentResult); setOpportunities(opportunityResult); setSystemHealth(systemHealthResult);
       void request<WorkflowAlert[]>("/api/v1/workflow/alerts").then(setAlerts).catch(() => undefined);
       void Promise.all([
         Promise.all(providerResult.providers.map(async (provider) => { try { return [provider.id, await request<ProviderHealth>(`/api/v1/providers/${encodeURIComponent(provider.id)}/health`)] as const; } catch { return [provider.id, null] as const; } })),
         Promise.all(providerResult.providers.map(async (provider) => { try { return await request<ImportJob[]>(`/api/v1/providers/${encodeURIComponent(provider.id)}/retrievals`); } catch { return []; } })),
       ]).then(([providerHealthEntries, retrievalEntries]) => {
+        if (requestId !== loadRequestRef.current) return;
         setHealth(Object.fromEntries(providerHealthEntries.filter((entry): entry is readonly [string, ProviderHealth] => entry[1] !== null)));
         setRetrievals(retrievalEntries.flat());
       }).catch(() => undefined);
@@ -517,14 +519,12 @@ function Workspace({ token, onLogout }: { token: string; onLogout: () => void })
       if (requestId !== loadRequestRef.current) return;
       if (caught instanceof Error && /authentication|session/i.test(caught.message)) onLogout();
       else setError(caught instanceof Error ? caught.message : "Workspace data could not be loaded");
-    } finally { setLoading(false); }
+    } finally {
+      if (requestId === loadRequestRef.current) setLoading(false);
+    }
   }, [onLogout, request]);
 
-  useEffect(() => {
-    void loadWorkspace();
-    const retryTimer = window.setTimeout(() => void loadWorkspace(), 750);
-    return () => window.clearTimeout(retryTimer);
-  }, [loadWorkspace]);
+  useEffect(() => { void loadWorkspace(); }, [loadWorkspace]);
 
   const loadAnalytics = useCallback(async () => {
     setAnalyticsLoading(true); setError(null);
