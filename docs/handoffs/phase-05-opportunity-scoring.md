@@ -2,7 +2,7 @@
 
 Date: 2026-08-01
 Status: complete for the local/manual prototype gate
-Commit: recorded after final verification
+Commit: `ba71211` (`Complete Phase 5 opportunity scoring`)
 
 ## Delivered
 

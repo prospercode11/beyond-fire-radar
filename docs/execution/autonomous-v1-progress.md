@@ -44,6 +44,7 @@ This ledger records executable evidence for the autonomous v1 objective. Synthet
 - Scope: versioned feature availability, temporal incident/property evidence selection, source quality, incident validity, material loss/complexity/fit/data sufficiency, transparent ranking and abstention only. No arbitrary probability, insurance coverage inference, or consumer outreach.
 - Evidence: migrations `0009_opportunity_scoring` through `0011_temporal_incident_links`, 34-test repository verification, 12 focused incident/scoring tests, fresh migration round-trip, clean-database API smoke with fixture labeling/replay, scoring contract evaluation with `accuracy_claim_allowed=false`, updated architecture/data/modeling/source/execution documents, and final Luna review with no critical/high findings.
 - Limitation: real outcome labels/calibration, official source approval/terms, production alert authorization, and PostgreSQL/PostGIS/Redis execution remain external gates. Live Sarasota polling remains disabled.
+- Commit: `ba71211` (`Complete Phase 5 opportunity scoring`).
 
 ## Remaining phases
 
