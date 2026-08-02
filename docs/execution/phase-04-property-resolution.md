@@ -22,3 +22,7 @@ Implement the Sarasota property-data foundation using approved manual/file impor
 ## Acceptance gate
 
 The Phase 4 local/manual gate passes: executable evaluation cases select the fixture parcel when evidence permits, ambiguous/unit/intersection cases abstain or preserve uncertainty, source-row-to-property provenance is inspectable through the authenticated API, human decisions survive reprocessing, and no exact marker is exposed for block/intersection-only incidents. Real approved property data, PostgreSQL/PostGIS/Redis execution, and production spatial accuracy remain external evidence gates; local fixtures cannot close them.
+
+## 2026-08-02 manual Sarasota snapshot
+
+An operator-supplied snapshot from the official Sarasota Property Appraiser download listings was imported through the bounded, audited file workflow’s streaming normalized-CSV command. The parcel/sales ZIP, detailed ZIP, normalized import, and official parcel GIS layer are recorded with hashes and row-level provenance in `docs/data/source-registry.md` and `docs/handoffs/sarasota-property-manual-import-2026-08-02.md`. The import is labeled `manual_snapshot` with `manual_attestation`; it does not create legal approval, source-terms evidence, automated property polling, or a real-world accuracy claim.

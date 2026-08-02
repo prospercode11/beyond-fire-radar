@@ -137,10 +137,13 @@ def _parser_version_id(provider_id: str, version: str) -> str:
     return str(uuid5(NAMESPACE_URL, f"beyond-fire-radar:parser:{provider_id}:{version}"))
 
 
-def seed_parser_versions(db: Session) -> None:
+def seed_parser_versions(db: Session, *, include_synthetic_fixtures: bool = False) -> None:
     expected = list(EXPECTED_FIELDS)
     required = list(REQUIRED_FIELDS)
-    for provider_id in ("sarasota.official_dispatch", "fixture.sarasota.dispatch"):
+    provider_ids = ["sarasota.official_dispatch"]
+    if include_synthetic_fixtures:
+        provider_ids.append("fixture.sarasota.dispatch")
+    for provider_id in provider_ids:
         existing = db.scalar(
             select(ParserVersion).where(
                 ParserVersion.provider_id == provider_id,

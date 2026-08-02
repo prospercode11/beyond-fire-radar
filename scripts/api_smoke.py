@@ -43,8 +43,12 @@ def main() -> None:
 
         providers = client.get("/api/v1/providers", headers=headers)
         providers.raise_for_status()
-        if not providers.json()["providers"]:
+        provider_rows = providers.json()["providers"]
+        if not provider_rows:
             raise RuntimeError("provider registry is empty")
+        fixture_enabled = any(
+            provider["id"] == "fixture.sarasota.dispatch" for provider in provider_rows
+        )
 
         me = client.get("/api/v1/auth/me", headers=headers)
         me.raise_for_status()
@@ -63,59 +67,65 @@ def main() -> None:
         if "bfr_http_requests_total" not in metrics.text:
             raise RuntimeError("metrics endpoint did not expose request metrics")
 
-        snapshot_path = (
-            Path(__file__).resolve().parents[1] / "apps/api/fixtures/sample_sarasota_dispatch.csv"
-        )
-        with snapshot_path.open("rb") as snapshot:
-            upload = client.post(
-                "/api/v1/providers/fixture.sarasota.dispatch/snapshots",
-                headers={**headers, "Idempotency-Key": "api-smoke-scheduler-v1"},
-                files={"file": (snapshot_path.name, snapshot, "text/csv")},
-                data={"authorized_snapshot": "false"},
+        if fixture_enabled:
+            snapshot_path = (
+                Path(__file__).resolve().parents[1]
+                / "apps/api/fixtures/sample_sarasota_dispatch.csv"
             )
-        upload.raise_for_status()
-        if upload.json()["normalized_record_count"] != 3:
-            raise RuntimeError("dispatch snapshot did not produce the expected normalized rows")
-        if upload.json()["acquisition_mode"] != "synthetic_fixture":
-            raise RuntimeError("fixture ingestion was not labeled as synthetic input")
+            with snapshot_path.open("rb") as snapshot:
+                upload = client.post(
+                    "/api/v1/providers/fixture.sarasota.dispatch/snapshots",
+                    headers={**headers, "Idempotency-Key": "api-smoke-scheduler-v1"},
+                    files={"file": (snapshot_path.name, snapshot, "text/csv")},
+                    data={"authorized_snapshot": "false"},
+                )
+            upload.raise_for_status()
+            if upload.json()["normalized_record_count"] != 3:
+                raise RuntimeError("dispatch snapshot did not produce the expected normalized rows")
+            if upload.json()["acquisition_mode"] != "synthetic_fixture":
+                raise RuntimeError("fixture ingestion was not labeled as synthetic input")
 
-        before_incidents = client.get(
-            "/api/v1/incidents?provider_id=fixture.sarasota.dispatch", headers=headers
-        )
-        before_incidents.raise_for_status()
-        process = client.post(
-            f"/api/v1/incidents/process/retrievals/{upload.json()['retrieval_id']}",
-            headers=headers,
-        )
-        process.raise_for_status()
-        after_incidents = client.get(
-            "/api/v1/incidents?provider_id=fixture.sarasota.dispatch", headers=headers
-        )
-        after_incidents.raise_for_status()
-        after_count = len(after_incidents.json())
-
-        with snapshot_path.open("rb") as snapshot:
-            replay = client.post(
-                "/api/v1/providers/fixture.sarasota.dispatch/snapshots",
-                headers={**headers, "Idempotency-Key": "api-smoke-scheduler-v1"},
-                files={"file": (snapshot_path.name, snapshot, "text/csv")},
-                data={"authorized_snapshot": "false"},
+            before_incidents = client.get(
+                "/api/v1/incidents?provider_id=fixture.sarasota.dispatch", headers=headers
             )
-        replay.raise_for_status()
-        if not replay.json()["replayed"]:
-            raise RuntimeError("dispatch snapshot replay was not reported")
+            before_incidents.raise_for_status()
+            process = client.post(
+                f"/api/v1/incidents/process/retrievals/{upload.json()['retrieval_id']}",
+                headers=headers,
+            )
+            process.raise_for_status()
+            after_incidents = client.get(
+                "/api/v1/incidents?provider_id=fixture.sarasota.dispatch", headers=headers
+            )
+            after_incidents.raise_for_status()
+            after_count = len(after_incidents.json())
 
-        process_replay = client.post(
-            f"/api/v1/incidents/process/retrievals/{replay.json()['retrieval_id']}",
-            headers=headers,
-        )
-        process_replay.raise_for_status()
-        final_incidents = client.get(
-            "/api/v1/incidents?provider_id=fixture.sarasota.dispatch", headers=headers
-        )
-        final_incidents.raise_for_status()
-        if len(final_incidents.json()) != after_count:
-            raise RuntimeError("replaying a Sarasota fixture created duplicate canonical incidents")
+            with snapshot_path.open("rb") as snapshot:
+                replay = client.post(
+                    "/api/v1/providers/fixture.sarasota.dispatch/snapshots",
+                    headers={**headers, "Idempotency-Key": "api-smoke-scheduler-v1"},
+                    files={"file": (snapshot_path.name, snapshot, "text/csv")},
+                    data={"authorized_snapshot": "false"},
+                )
+            replay.raise_for_status()
+            if not replay.json()["replayed"]:
+                raise RuntimeError("dispatch snapshot replay was not reported")
+
+            process_replay = client.post(
+                f"/api/v1/incidents/process/retrievals/{replay.json()['retrieval_id']}",
+                headers=headers,
+            )
+            process_replay.raise_for_status()
+            final_incidents = client.get(
+                "/api/v1/incidents?provider_id=fixture.sarasota.dispatch", headers=headers
+            )
+            final_incidents.raise_for_status()
+            if len(final_incidents.json()) != after_count:
+                raise RuntimeError(
+                    "replaying a Sarasota fixture created duplicate canonical incidents"
+                )
+        elif any(provider["id"].startswith("fixture.") for provider in provider_rows):
+            raise RuntimeError("fixture provider exposure was inconsistent")
 
     print("API smoke test passed")
 

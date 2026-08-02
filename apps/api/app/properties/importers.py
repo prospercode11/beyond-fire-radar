@@ -6,9 +6,9 @@ import io
 import json
 import re
 import zipfile
-from dataclasses import dataclass, field
-from pathlib import PurePosixPath
-from typing import Any, Optional
+from dataclasses import dataclass, field, replace
+from pathlib import Path, PurePosixPath
+from typing import Any, Iterator, Optional
 from xml.etree import ElementTree
 
 from app.properties.address import NormalizedAddress, normalize_address
@@ -41,6 +41,25 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "unit": ("unit", "unit_number", "apartment", "apt", "condo_unit"),
     "address_alias": ("address_alias", "alternate_address", "alias_address", "complex_name"),
     "geometry": ("geometry", "geometry_json", "wkt", "geojson"),
+    "sales_count": ("sales_count",),
+    "last_sale_date": ("last_sale_date",),
+    "last_sale_price": ("last_sale_price",),
+    "last_sale_legal_reference": ("last_sale_legal_reference",),
+    "last_sale_deed_type": ("last_sale_deed_type",),
+    "last_sale_recording_date": ("last_sale_recording_date",),
+    "total_value": ("total_value",),
+    "land_value": ("land_value",),
+    "building_value": ("building_value",),
+    "assessed_value": ("assessed_value",),
+    "taxable_value": ("taxable_value",),
+    "bedrooms": ("bedrooms",),
+    "rooms": ("rooms",),
+    "outbuilding_count": ("outbuilding_count",),
+    "source_parcel_sales_sha256": ("source_parcel_sales_sha256",),
+    "source_detailed_sha256": ("source_detailed_sha256",),
+    "source_geometry_service": ("source_geometry_service",),
+    "source_geometry_layer": ("source_geometry_layer",),
+    "source_rows": ("source_rows",),
 }
 
 
@@ -450,3 +469,93 @@ def parse_property_file(
             NormalizedPropertyRow(row_number, source_filename, raw, fields, address, row_hash)
         )
     return PropertyParseResult(format_name, headers, resolved_mapping, rows, issues)
+
+
+def iter_normalized_csv_file(
+    path: Path,
+    *,
+    mapping: Optional[dict[str, str]] = None,
+    chunk_rows: int = 1000,
+) -> Iterator[PropertyParseResult]:
+    """Parse a normalized CSV in bounded chunks while retaining the normal parser contract.
+
+    The HTTP importer intentionally accepts a bounded bytes payload. Real county exports can
+    exceed that limit, so the operator-only manual import path uses this iterator to avoid
+    materializing every source row and its geometry at once. Each yielded result has row numbers
+    adjusted to the original file and uses the same normalization and validation code as the
+    regular importer.
+    """
+    if chunk_rows < 1:
+        raise ValueError("chunk_rows must be positive")
+    csv.field_size_limit(max(csv.field_size_limit(), 64 * 1024 * 1024))
+    filename = path.name
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        headers = list(reader.fieldnames or [])
+        if not headers:
+            yield PropertyParseResult(
+                format="csv",
+                headers=[],
+                mapping=mapping or {},
+                issues=[PropertyParseIssue("parse_failed", "CSV has no header row")],
+            )
+            return
+        resolved_mapping = mapping or _auto_mapping(headers)
+        chunk: list[dict[str, Any]] = []
+        chunk_start_row = 2
+        saw_data = False
+        for raw in reader:
+            if not any(_clean(value) for value in raw.values()):
+                continue
+            if not chunk:
+                chunk_start_row = reader.line_num
+            chunk.append(raw)
+            saw_data = True
+            if len(chunk) < chunk_rows:
+                continue
+            yield _parse_csv_chunk(
+                headers,
+                chunk,
+                filename,
+                resolved_mapping,
+                chunk_start_row,
+            )
+            chunk = []
+        if chunk:
+            yield _parse_csv_chunk(
+                headers,
+                chunk,
+                filename,
+                resolved_mapping,
+                chunk_start_row,
+            )
+        if not saw_data:
+            yield parse_property_file(
+                (",".join(headers) + "\n").encode("utf-8"),
+                "text/csv",
+                filename,
+                resolved_mapping,
+            )
+
+
+def _parse_csv_chunk(
+    headers: list[str],
+    rows: list[dict[str, Any]],
+    filename: str,
+    mapping: dict[str, str],
+    source_start_row: int,
+) -> PropertyParseResult:
+    buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(buffer, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    parsed = parse_property_file(buffer.getvalue().encode("utf-8"), "text/csv", filename, mapping)
+    row_offset = source_start_row - 2
+    parsed.rows = [replace(row, row_number=row.row_number + row_offset) for row in parsed.rows]
+    parsed.issues = [
+        replace(issue, row_number=issue.row_number + row_offset)
+        if issue.row_number is not None
+        else issue
+        for issue in parsed.issues
+    ]
+    return parsed

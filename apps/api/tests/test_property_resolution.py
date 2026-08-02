@@ -6,7 +6,7 @@ import zipfile
 from pathlib import Path
 
 from app.properties.address import normalize_address
-from app.properties.importers import parse_property_file
+from app.properties.importers import iter_normalized_csv_file, parse_property_file
 from fastapi.testclient import TestClient
 
 
@@ -128,6 +128,16 @@ def test_property_parser_supports_xlsx_zip_and_mapping() -> None:
     parsed_zip = parse_property_file(archive_payload.getvalue(), "application/zip", "property.zip")
     assert parsed_zip.format == "zip"
     assert {row.fields["parcel_id"] for row in parsed_zip.rows} == {"X-2", "X-3"}
+
+
+def test_large_csv_iterator_preserves_source_row_numbers() -> None:
+    path = Path(__file__).parents[1] / "fixtures" / "sample_sarasota_property_appraiser.csv"
+    parsed_rows = [
+        row for chunk in iter_normalized_csv_file(path, chunk_rows=2) for row in chunk.rows
+    ]
+    assert len(parsed_rows) == 8
+    assert parsed_rows[0].row_number == 2
+    assert parsed_rows[-1].row_number == 9
 
 
 def test_property_import_replay_partial_failure_full_removal_and_rollback(

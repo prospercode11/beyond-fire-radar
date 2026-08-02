@@ -233,8 +233,16 @@ def disable_provider(
 
 
 def seed_providers(db: DbSession) -> None:
-    registry = build_registry(get_settings())
-    for metadata in registry.list_metadata():
+    settings = get_settings()
+    registry = build_registry(settings)
+    metadata_rows = registry.list_metadata()
+    if not settings.enable_synthetic_fixture_providers:
+        metadata_rows = [
+            metadata
+            for metadata in metadata_rows
+            if not metadata.provider_id.startswith("fixture.")
+        ]
+    for metadata in metadata_rows:
         existing = db.get(Provider, metadata.provider_id)
         if existing is None:
             db.add(
@@ -289,7 +297,7 @@ def seed_providers(db: DbSession) -> None:
                         known_status_note="No property or dispatch retrieval has run yet.",
                     )
                 )
-    seed_parser_versions(db)
+    seed_parser_versions(db, include_synthetic_fixtures=settings.enable_synthetic_fixture_providers)
 
 
 retrieval_router = APIRouter(prefix="/api/v1/retrievals", tags=["dispatch-ingestion"])

@@ -92,6 +92,8 @@
 - [ ] Official Sarasota property-source approval/terms evidence and approved real snapshot: external gate remains open.
 - [ ] PostgreSQL/PostGIS and Redis integration execution: Docker/Colima unavailable in this environment.
 
+Note: A manually supplied official Sarasota property snapshot was imported on 2026-08-02 with immutable hashes and row provenance. It is labeled `manual_snapshot`/`manual_attestation` and does not satisfy the approval/terms checkbox or enable automated property retrieval.
+
 ## Phase 6 — Internal review workflow and dashboard
 
 - [x] Responsive internal shell covers Command Center, Incident Stream, Opportunities, Data Health, and Settings.

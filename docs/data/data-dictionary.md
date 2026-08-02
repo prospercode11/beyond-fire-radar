@@ -72,6 +72,12 @@ Phase 6 adds no database tables or source fields. The dashboard reads governed A
 
 Every normalized external field must retain provider, raw record ID, raw field name/value, normalized value, transformation/version, confidence, effective time, and retrieval time. Every model feature must carry an `available_at` timestamp and feature version. Every score run must carry an `as_of` boundary and explicit scoring release. Every manual label must carry reviewer identity, timestamp, reason, and source evidence where applicable.
 
+## Imported Sarasota property snapshot
+
+The 2026-08-02 manual Sarasota property import is represented by one `property_imports` record (`64e7e421-518b-4ea1-97c5-f3d8701884f0`) with `source_version=sarasota.scpa.2026-08-02`, `acquisition_mode=manual_snapshot`, and `authorization_basis=manual_attestation`. Its immutable normalized CSV payload hash is `8b4a3490636c493028df57b231581f9c50880244d20ee923fd73207d0bb9691e`; the source ZIP hashes and ArcGIS layer provenance are retained in each `property_source_rows.normalized_fields` value. The import accepted 324,924 rows, rejected 6 rows for missing required addresses, and retained 250,986 GIS polygon objects.
+
+The normalized fields include parcel/situs identity, address components, municipality/postal code, ownership/mailing data, building/living area, year-built data, unit/building counts, values, sales summary fields, source hashes, GIS service/layer metadata, and source-row references. `geometry_json` stores the captured WGS84 Polygon/MultiPolygon object when present. `property_field_values` materializes the sales/value/residential-detail additions while `property_source_rows.normalized_fields` remains the complete normalized snapshot row. This import is manually supplied prototype data, not source approval or a real-world accuracy claim.
+
 Phase 5 scoring is a versioned expert-prior evidence ranking only. `provisional_score` is not a probability, and alert eligibility is a hard-gated review state. No score field is evidence of damage, coverage, claim validity, or consumer contact eligibility.
 
 Phase 3 linkage is an explainable weighted baseline, not machine learning. A possible match is kept separate pending human review; no fuzzy-only merge is permitted. Incident classification remains source-faithful and does not infer a working fire from an unverified signal.

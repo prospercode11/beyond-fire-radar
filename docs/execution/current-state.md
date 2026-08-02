@@ -25,16 +25,17 @@ Scope: Phase 0 through Phase 10 v1 closure plus local Sarasota polling runtime a
 - Independent reviews and handoffs in `docs/reviews/phase-01-foundation-review.md`, `docs/reviews/phase-02-dispatch-ingestion-review.md`, `docs/handoffs/phase-01-foundation.md`, `docs/handoffs/phase-02-dispatch-ingestion.md`, and the Phase 3 review/handoff produced for this commit.
 - Phase 4 migration `0007_property_resolution` with provider-scoped property imports, immutable source rows, mapping profiles, current parcel/building/address projections, field-level provenance, and rollback lineage.
 - Manual/file property ingestion for CSV, XLSX, and ZIP, including preview, mappings, schema/row errors, duplicate detection, full/incremental modes, idempotent replay, full replacement/removals, and audited rollback.
+- Official Sarasota parcel/sales CSV, detailed property data, and parcel GIS geometry were manually downloaded and imported as one content-addressed snapshot on 2026-08-02; the import retained 324,924 accepted parcels, 250,986 geometries, 6 missing-address rejections, source hashes, and immutable row provenance. This manual attestation does not close the official property approval/terms gate, and automated property polling remains disabled.
 - Versioned address normalization for exact addresses, units, directional/street variants, blocks, intersections, highways/routes, landmarks, and malformed locations; original values remain available.
 - Explainable parcel candidate generation using normalized addresses, aliases, street/house, municipality/ZIP, coordinates, grid/context, and master/unit relationships with explicit score/margin, contradictions, quality, abstention, and human-review evidence.
 - Authenticated property import, parcel provenance, match/reprocess, and human confirm/reject/clear/correct APIs; human decisions remain visible after reprocessing.
 - Phase 4 focused adversarial tests, migration round-trip, isolated application/API verification, independent Luna review, and corrected high-severity findings.
 - Phase 5 migrations `0009_opportunity_scoring` through `0011_temporal_incident_links` add a versioned scoring registry, score history, feature-level contributions/provenance, human overrides, explicit as-of boundaries, rollback predecessors, and effective-end timestamps for historical incident assignments.
 - Transparent opportunity scoring uses separately versioned evidence components, a weighted geometric provisional rank, hard negative/contradiction/property gates, missing-data penalties, human-review bands, and explicit abstention. It is not a probability and does not infer damage, coverage, claim validity, or outreach eligibility.
-- Authenticated score/list/rescore/override/version-registration/rollback APIs and leakage-controlled evaluation contracts are implemented. Synthetic and unauthorized/live retrievals cannot produce operational alerts; Sarasota live polling remains disabled.
+- Authenticated score/list/rescore/override/version-registration/rollback APIs and leakage-controlled evaluation contracts are implemented. Synthetic and unauthorized/live retrievals cannot produce operational alerts; production/staging Sarasota live polling remains disabled while local development uses the separately recorded guarded activation.
 - Phase 5 focused scoring/evaluation tests, migration round-trip, verification contract, application/API checks, independent Luna review, and corrected high-severity findings are recorded in the Phase 5 review/handoff.
 - Phase 6 internal dashboard foundation provides Command Center, Incident Stream, Opportunities, Data Health, Settings, source posture, review queue, incident map, evidence workbench, and property-context surfaces.
-- Phase 6 browser states distinguish loading, API-unavailable, and empty data; manual Sarasota provenance, freshness limits, uncertainty, human-review requirements, and disabled live polling remain visible.
+- Phase 6 browser states distinguish loading, API-unavailable, and empty data; manual Sarasota provenance, freshness limits, uncertainty, human-review requirements, and the current guarded polling state remain visible.
 - Phase 6 responsive navigation and keyboard-accessible controls were inspected at desktop and 390×844 mobile dimensions; the dashboard has no horizontal overflow and does not fabricate records, map points, property candidates, or scores.
 - Phase 6 verification, handoff, and independent Luna review are recorded in the Phase 6 execution/review/handoff documents.
 - Phase 7 migrations `0012_internal_workflow` and `0013_workflow_state_guards` add internal alerts, in-app notification jobs, terminal-safe escalation, assignment history, append-only notes, and internal existing-client CSV import rows with idempotency, provenance, suppression, and audit controls.
@@ -54,7 +55,7 @@ Scope: Phase 0 through Phase 10 v1 closure plus local Sarasota polling runtime a
 
 ## Explicitly not implemented
 
-Production/staging Sarasota live polling without a recorded `LegalApproval`, cross-source deduplication, GIS/permit imports, learned-model activation, empirical accuracy claims, live GIS/map data, managed production deployment activation, production SSO/MFA, email/SMS/phone notifications, and consumer outreach.
+Production/staging Sarasota live polling without a recorded `LegalApproval`, automated GIS/permit collection, cross-source deduplication, learned-model activation, empirical accuracy claims, live GIS/map data, managed production deployment activation, production SSO/MFA, email/SMS/phone notifications, and consumer outreach.
 
 ## Environment evidence
 
