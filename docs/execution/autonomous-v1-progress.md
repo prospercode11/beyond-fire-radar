@@ -80,7 +80,7 @@ This ledger records executable evidence for the autonomous v1 objective. Synthet
 - Governance: manual Sarasota snapshots, CSV/JSON/HTML files, fixtures, and replay remain the only dispatch workflows. Live polling remains disabled. Synthetic or directional manifests can exercise mechanics but cannot make a real-world accuracy claim. No learned probability is served.
 - Evidence: migrations `0017_learning_infrastructure` and `0018_learning_control_actions`, focused learning tests, full repository verification, fresh migration round-trip, isolated API smoke, authenticated Model Lab posture surface, updated execution/architecture/data/source documents, and independent Luna modeling review with all critical/high findings remediated.
 - Limitation: real approved outcome labels, held-out improvement, valid calibration, improved top-alert precision, complete error analysis, administrator approval, production serving, PostgreSQL/PostGIS, Redis, production identity/MFA, and external source approval remain open gates.
-- Commit: to be recorded after the verified Phase 9 closure commit.
+- Commit: `7ef5f6f` (`Complete Phase 9 learning infrastructure`).
 
 ## Remaining phases
 

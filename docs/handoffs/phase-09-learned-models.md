@@ -30,6 +30,8 @@ Final closure run on 2026-08-02:
 
 The final repository verification and migration/API checks were rerun after the implementation and documentation closure edits.
 
+Implementation commit: `7ef5f6f` (`Complete Phase 9 learning infrastructure`).
+
 PostgreSQL/PostGIS and Redis were not executed because Docker/Colima is unavailable on this host. This is an explicit environment limitation, not production integration approval.
 
 ## Acceptance boundary
