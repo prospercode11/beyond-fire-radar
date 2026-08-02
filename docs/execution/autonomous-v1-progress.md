@@ -73,6 +73,15 @@ This ledger records executable evidence for the autonomous v1 objective. Synthet
 - Limitation: no approved real outcome dataset, real held-out labels, calibration, production identity/MFA, PostgreSQL/PostGIS/Redis execution, or external source approval is available; Model Lab readiness is intentionally blocked.
 - Commit: `e19a400` (`Complete Phase 8 outcomes analytics`).
 
+## Phase 9 — Learned models and learning infrastructure
+
+- Status: complete for the inactive local learning-foundation gate.
+- Scope: versioned feature/label contracts, manifest-bound training snapshots, incident-grouped chronological splits, leakage checks, logistic baseline mechanics, blocked boosted adapter boundary, calibration/uncertainty/selective-prediction metrics, model cards, release lineage, offline replay, drift reporting, rollback, fallback policy, and explicit administrator/serving gates.
+- Governance: manual Sarasota snapshots, CSV/JSON/HTML files, fixtures, and replay remain the only dispatch workflows. Live polling remains disabled. Synthetic or directional manifests can exercise mechanics but cannot make a real-world accuracy claim. No learned probability is served.
+- Evidence: migrations `0017_learning_infrastructure` and `0018_learning_control_actions`, focused learning tests, full repository verification, fresh migration round-trip, isolated API smoke, authenticated Model Lab posture surface, updated execution/architecture/data/source documents, and independent Luna modeling review with all critical/high findings remediated.
+- Limitation: real approved outcome labels, held-out improvement, valid calibration, improved top-alert precision, complete error analysis, administrator approval, production serving, PostgreSQL/PostGIS, Redis, production identity/MFA, and external source approval remain open gates.
+- Commit: to be recorded after the verified Phase 9 closure commit.
+
 ## Remaining phases
 
-Phases 9–10 remain pending and must advance sequentially only after each preceding acceptance gate passes. Consumer outreach, legal conclusions, invented approvals, and unvalidated model accuracy remain prohibited.
+Phase 10 remains pending and must advance only after the Phase 9 handoff is accepted. Consumer outreach, legal conclusions, invented approvals, and unvalidated model accuracy remain prohibited.

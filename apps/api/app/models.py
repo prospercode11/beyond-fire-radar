@@ -1374,3 +1374,195 @@ class AnalyticsMetric(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class LearningFeatureSet(Base):
+    __tablename__ = "learning_feature_sets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    version: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    feature_names: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    definitions: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class LearningLabelSet(Base):
+    __tablename__ = "learning_label_sets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    version: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    label_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    positive_values: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    negative_values: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    excluded_values: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    definition: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class TrainingDatasetSnapshot(Base):
+    __tablename__ = "training_dataset_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_manifest_id",
+            "feature_set_id",
+            "label_set_id",
+            name="uq_training_dataset_snapshot_contract",
+        ),
+        UniqueConstraint("idempotency_key", name="uq_training_dataset_snapshot_idempotency"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(320), nullable=False)
+    dataset_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    feature_set_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_feature_sets.id"), index=True, nullable=False
+    )
+    label_set_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_label_sets.id"), index=True, nullable=False
+    )
+    source_manifest_id: Mapped[str] = mapped_column(
+        ForeignKey("evaluation_manifests.id"), index=True, nullable=False
+    )
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    mechanics_only: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    real_data_eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    incident_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    filters: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    source_provenance: Mapped[dict[str, Any]] = mapped_column(
+        JsonType, nullable=False, default=dict
+    )
+    rows: Mapped[list[dict[str, Any]]] = mapped_column(JsonType, nullable=False, default=list)
+    split_assignments: Mapped[dict[str, str]] = mapped_column(
+        JsonType, nullable=False, default=dict
+    )
+    split_report: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    leakage_report: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    blocked_reasons: Mapped[list[str]] = mapped_column(JsonType, nullable=False, default=list)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ModelRelease(Base):
+    __tablename__ = "model_releases"
+    __table_args__ = (
+        CheckConstraint(
+            "status in ('blocked', 'inactive', 'candidate', 'challenger', 'champion', 'retired', 'rolled_back')",
+            name="ck_model_release_status",
+        ),
+        Index(
+            "uq_model_releases_one_champion",
+            "status",
+            unique=True,
+            sqlite_where=text("status = 'champion'"),
+            postgresql_where=text("status = 'champion'"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    model_version: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    algorithm: Mapped[str] = mapped_column(String(48), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    feature_set_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_feature_sets.id"), index=True, nullable=False
+    )
+    label_set_id: Mapped[str] = mapped_column(
+        ForeignKey("learning_label_sets.id"), index=True, nullable=False
+    )
+    dataset_snapshot_id: Mapped[str] = mapped_column(
+        ForeignKey("training_dataset_snapshots.id"), index=True, nullable=False
+    )
+    predecessor_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("model_releases.id"), nullable=True
+    )
+    artifact: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    evaluation: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    training_report: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    model_card: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    approval_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    approved_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    deployed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    rolled_back_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    inactive_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ModelReplayRun(Base):
+    __tablename__ = "model_replay_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    model_release_id: Mapped[str] = mapped_column(
+        ForeignKey("model_releases.id"), index=True, nullable=False
+    )
+    dataset_snapshot_id: Mapped[str] = mapped_column(
+        ForeignKey("training_dataset_snapshots.id"), index=True, nullable=False
+    )
+    metrics: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    accuracy_claim_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ModelDriftReport(Base):
+    __tablename__ = "model_drift_reports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    model_release_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("model_releases.id"), index=True, nullable=True
+    )
+    baseline_snapshot_id: Mapped[str] = mapped_column(
+        ForeignKey("training_dataset_snapshots.id"), index=True, nullable=False
+    )
+    comparison_snapshot_id: Mapped[str] = mapped_column(
+        ForeignKey("training_dataset_snapshots.id"), index=True, nullable=False
+    )
+    feature_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.2)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JsonType, nullable=False, default=dict)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ModelControlAction(Base):
+    __tablename__ = "model_control_actions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    action: Mapped[str] = mapped_column(String(24), nullable=False)
+    model_release_id: Mapped[str] = mapped_column(
+        ForeignKey("model_releases.id"), index=True, nullable=False
+    )
+    result_model_release_id: Mapped[str] = mapped_column(
+        ForeignKey("model_releases.id"), index=True, nullable=False
+    )
+    actor_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    action_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JsonType, nullable=False, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

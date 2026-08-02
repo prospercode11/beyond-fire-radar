@@ -12,6 +12,7 @@ from app.api.routes import (
     admin,
     auth,
     incidents,
+    learning,
     opportunities,
     outcomes,
     properties,
@@ -67,7 +68,7 @@ def healthz() -> dict[str, object]:
         "status": "ok",
         "service": settings.app_name,
         "live_polling_enabled": settings.enable_live_sarasota_dispatch_polling,
-        "phase": "8-outcomes-analytics",
+        "phase": "9-learning-infrastructure",
     }
 
 
@@ -90,4 +91,5 @@ app.include_router(properties.match_router)
 app.include_router(opportunities.router)
 app.include_router(workflow.router)
 app.include_router(outcomes.router)
+app.include_router(learning.router)
 app.include_router(admin.router)

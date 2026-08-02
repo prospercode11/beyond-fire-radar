@@ -648,3 +648,109 @@ class EvaluationManifestResponse(BaseModel):
 class AnalyticsReportResponse(BaseModel):
     manifest: EvaluationManifestResponse
     metrics: List[AnalyticsMetricResponse]
+
+
+class LearningDatasetCreateRequest(BaseModel):
+    manifest_id: str = Field(min_length=1, max_length=80)
+    target_label_type: str = Field(default="review_relevance", min_length=2, max_length=48)
+    mechanics_only: bool = False
+    idempotency_key: str = Field(min_length=8, max_length=320)
+
+
+class LearningDatasetResponse(BaseModel):
+    id: str
+    dataset_version: str
+    feature_set_id: str
+    label_set_id: str
+    source_manifest_id: str
+    as_of: datetime
+    status: str
+    mechanics_only: bool
+    real_data_eligible: bool
+    row_count: int
+    incident_count: int
+    filters: Dict[str, Any]
+    source_provenance: Dict[str, Any]
+    split_assignments: Dict[str, str]
+    split_report: Dict[str, Any]
+    leakage_report: Dict[str, Any]
+    blocked_reasons: List[str]
+    created_by: str
+    created_at: datetime
+
+
+class LearningTrainRequest(BaseModel):
+    dataset_snapshot_id: str = Field(min_length=1, max_length=80)
+    algorithm: str = Field(default="logistic_baseline", min_length=3, max_length=48)
+    mechanics_only: bool = False
+    idempotency_key: str = Field(min_length=8, max_length=320)
+
+
+class LearningControlRequest(BaseModel):
+    idempotency_key: str = Field(min_length=8, max_length=320)
+
+
+class LearningModelResponse(BaseModel):
+    id: str
+    model_version: str
+    algorithm: str
+    status: str
+    feature_set_id: str
+    label_set_id: str
+    dataset_snapshot_id: str
+    predecessor_id: Optional[str]
+    artifact: Dict[str, Any]
+    evaluation: Dict[str, Any]
+    training_report: Dict[str, Any]
+    model_card: Dict[str, Any]
+    approval_required: bool
+    approved_by: Optional[str]
+    approved_at: Optional[datetime]
+    deployed_at: Optional[datetime]
+    rolled_back_at: Optional[datetime]
+    inactive_reason: Optional[str]
+    created_by: str
+    created_at: datetime
+
+
+class LearningReplayRequest(BaseModel):
+    dataset_snapshot_id: Optional[str] = Field(default=None, max_length=80)
+    idempotency_key: str = Field(min_length=8, max_length=320)
+
+
+class LearningReplayResponse(BaseModel):
+    id: str
+    model_release_id: str
+    dataset_snapshot_id: str
+    metrics: Dict[str, Any]
+    accuracy_claim_allowed: bool
+    created_by: str
+    created_at: datetime
+
+
+class LearningDriftRequest(BaseModel):
+    baseline_snapshot_id: str = Field(min_length=1, max_length=80)
+    comparison_snapshot_id: str = Field(min_length=1, max_length=80)
+    model_release_id: Optional[str] = Field(default=None, max_length=80)
+    idempotency_key: str = Field(min_length=8, max_length=320)
+
+
+class LearningDriftResponse(BaseModel):
+    id: str
+    model_release_id: Optional[str]
+    baseline_snapshot_id: str
+    comparison_snapshot_id: str
+    feature_version: str
+    status: str
+    threshold: float
+    metrics: Dict[str, Any]
+    created_by: str
+    created_at: datetime
+
+
+class LearningPolicyResponse(BaseModel):
+    mode: str
+    model_release_id: Optional[str]
+    learned_model_active: bool
+    reason: str
+    probability_display: bool

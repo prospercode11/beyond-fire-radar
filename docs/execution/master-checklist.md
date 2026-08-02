@@ -130,6 +130,22 @@
 - [x] Independent Luna review completed; critical/high findings addressed. Final Phase 8 review recorded with 0 Critical and 0 High findings.
 - [ ] Official Sarasota outcome/property-source evidence, real held-out labels, calibration, PostgreSQL/PostGIS/Redis execution, and production identity remain external or later gates.
 
+## Phase 9 — Learned models and learning infrastructure
+
+- [x] Versioned feature and label contracts define reproducible fields, label values, missing behavior, and provenance boundaries.
+- [x] Immutable training-dataset snapshots bind to evaluation manifests and retain source provenance, incident groups, time-aware split assignments, and leakage reports.
+- [x] Logistic baseline trains only from structurally valid snapshots and records threshold precision/recall, precision intervals, calibration/Brier diagnostics, precision-at-K, uncertainty, selective-prediction, and abstention metadata.
+- [x] Candidate boosted-model adapter is versioned and fail-closed when no approved dependency or sufficient eligible real data is available.
+- [x] Model releases retain algorithm, feature/label/dataset lineage, model cards, training reports, evaluation metrics, predecessor/champion/challenger state, and rollback fields.
+- [x] Offline replay and feature-drift reports are idempotent, provenance-bound, and cannot create an accuracy claim.
+- [x] Human administrator promotion, serving feature flag, rule-based fallback, and rollback controls are implemented; learned serving remains disabled.
+- [x] Authenticated Model Lab posture view shows fallback state, release history, approval boundary, and no learned probability output.
+- [x] Adversarial tests cover grouped/time splits, future feature leakage, label leakage, inactive mechanics training, replay, drift, blocked synthetic/directional data, and promotion gating.
+- [x] Formatting, lint, type, unit, migration round-trip, API smoke, production build, and focused learning checks recorded.
+- [x] Independent Luna modeling review completed; critical/high findings addressed.
+- [ ] Real approved outcomes, held-out improvement, valid calibration, improved top-alert precision, complete error analysis, explicit administrator approval, and production model serving remain closed gates.
+- [ ] PostgreSQL/PostGIS and Redis integration execution: Docker/Colima unavailable in this environment.
+
 ## Phase gate rule
 
-Phase 9 must not start until the Phase 8 handoff is accepted. Live Sarasota polling, official property automation, empirical calibration, Boca, Broadcastify, outreach, production dashboard deployment, learned-model deployment, and later phases remain separately gated by their requirements.
+Phase 10 must not start until the Phase 9 handoff is accepted. Live Sarasota polling, official property automation, empirical calibration, Boca, Broadcastify, outreach, production dashboard deployment, learned-model deployment, and later phases remain separately gated by their requirements.

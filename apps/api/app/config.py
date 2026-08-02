@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     session_ttl_hours: int = Field(default=8, ge=1, le=168)
     enable_live_sarasota_dispatch_polling: bool = False
+    enable_learned_model_serving: bool = False
     bootstrap_admin_email: str = "admin@example.com"
     bootstrap_admin_password: str = "change-me-in-development"
     web_origin: str = "http://localhost:3000"

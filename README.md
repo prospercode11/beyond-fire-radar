@@ -4,7 +4,7 @@ Beyond Fire Radar is an internal, research-only property-loss intelligence syste
 
 ## Current scope
 
-Phase 0 through Phase 8 — Sarasota incident intelligence, property resolution, transparent scoring foundation, internal workflow, and outcomes/analytics foundation — are complete in this repository:
+Phase 0 through Phase 9 — Sarasota incident intelligence, property resolution, transparent scoring foundation, internal workflow, outcomes/analytics, and inactive learned-model infrastructure — are complete in this repository:
 
 - Architecture, product, modeling, compliance, data, testing, execution, and handoff documents.
 - FastAPI modular-monolith API with SQLAlchemy and Alembic migrations.
@@ -19,7 +19,7 @@ Phase 0 through Phase 8 — Sarasota incident intelligence, property resolution,
 - Authenticated internal alerts, assignments, append-only notes, in-app-only notification controls, and existing-client reference import with suppression safeguards.
 - Append-only reviewer outcome labels/events, source-provenance-bound evaluation manifests, directional metrics with denominators/warnings, and a blocked Model Lab readiness view. Reports do not make accuracy, calibration, damage, coverage, claim-validity, legal-approval, or conversion claims.
 
-Phase 4 provides a manual/file prototype for Sarasota property imports and explainable address-to-parcel resolution. Phase 5 adds a versioned, explainable, non-probability opportunity-ranking foundation with feature provenance, hard gates, abstention, review bands, as-of scoring, overrides, rescore history, and rollback through authenticated APIs. Phase 6 adds an authenticated internal dashboard foundation; Phase 7 adds internal-only workflow; Phase 8 adds manual outcome capture and reproducible directional analytics. Official property-source approval, live polling, learned/calibrated scoring, Phase 9 model deployment, production dashboard deployment, Boca/Broadcastify, and outreach remain gated; repository fixtures are not real-world accuracy evidence.
+Phase 4 provides a manual/file prototype for Sarasota property imports and explainable address-to-parcel resolution. Phase 5 adds a versioned, explainable, non-probability opportunity-ranking foundation with feature provenance, hard gates, abstention, review bands, as-of scoring, overrides, rescore history, and rollback through authenticated APIs. Phase 6 adds an authenticated internal dashboard foundation; Phase 7 adds internal-only workflow; Phase 8 adds manual outcome capture and reproducible directional analytics; Phase 9 adds versioned learning contracts, manifest-bound datasets, leakage checks, inactive baseline training, replay, drift, rollback, and explicit approval/serving gates. Official property-source approval, live polling, learned model activation, production dashboard deployment, Boca/Broadcastify, and outreach remain gated; repository fixtures are not real-world accuracy evidence.
 
 ## Local setup
 
