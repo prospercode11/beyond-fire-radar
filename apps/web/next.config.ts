@@ -11,7 +11,10 @@ const nextConfig: NextConfig = {
         { key: "X-Frame-Options", value: "DENY" },
         { key: "Referrer-Policy", value: "no-referrer" },
         { key: "Permissions-Policy", value: "camera=(), geolocation=(), microphone=()" },
-        { key: "Content-Security-Policy", value: "default-src 'self'; connect-src 'self' http: https:; frame-ancestors 'none'; base-uri 'self'" },
+        // Next.js emits inline RSC hydration/bootstrap scripts for the App Router.
+        // Keep the policy same-origin and disallow object/frame injection while
+        // allowing those framework bootstrap scripts to execute.
+        { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' http: https:; frame-ancestors 'none'; base-uri 'self'" },
       ],
     }];
   },
