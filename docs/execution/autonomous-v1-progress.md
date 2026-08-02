@@ -46,6 +46,15 @@ This ledger records executable evidence for the autonomous v1 objective. Synthet
 - Limitation: real outcome labels/calibration, official source approval/terms, production alert authorization, and PostgreSQL/PostGIS/Redis execution remain external gates. Live Sarasota polling remains disabled.
 - Commit: `ba71211` (`Complete Phase 5 opportunity scoring`).
 
+## Phase 6 — Internal review workflow and dashboard foundation
+
+- Status: complete for the internal/local dashboard gate.
+- Scope: responsive Command Center, Incident Stream, Opportunities, Data Health, Settings, review queue, Sarasota source posture, incident-map surface, evidence workbench, property context, and explicit loading/error/empty states.
+- Governance: Sarasota County manual snapshots remain the only displayed source posture; live polling is visibly disabled; the browser does not fabricate incidents, map points, property candidates, scores, approvals, or legal status. Provisional ranking language remains non-probabilistic and human-review-only.
+- Evidence: Next lint/build, repository verification contract, migration check, clean isolated API smoke, desktop/mobile browser inspection, keyboard navigation, required surface checks, and no-horizontal-overflow check. Independent Luna review is recorded with no unresolved critical/high findings.
+- Limitation: the map has no live GIS feed, the shell has no authenticated domain-data workflow yet, and production dashboard deployment, PostgreSQL/PostGIS, Redis, and external-source approvals remain open.
+- Commit: to be recorded after the final verified Phase 6 commit.
+
 ## Remaining phases
 
-Phases 6–10 remain pending and must advance sequentially only after each preceding acceptance gate passes. Consumer outreach, legal conclusions, invented approvals, and unvalidated model accuracy remain prohibited.
+Phases 7–10 remain pending and must advance sequentially only after each preceding acceptance gate passes. Consumer outreach, legal conclusions, invented approvals, and unvalidated model accuracy remain prohibited.

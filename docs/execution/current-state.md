@@ -1,7 +1,7 @@
 # Current state
 
-Updated: 2026-08-01 after Phase 5 verification
-Scope: Phase 0 through Phase 5 only
+Updated: 2026-08-01 after Phase 6 verification
+Scope: Phase 0 through Phase 6 only
 
 ## Implemented
 
@@ -33,17 +33,21 @@ Scope: Phase 0 through Phase 5 only
 - Transparent opportunity scoring uses separately versioned evidence components, a weighted geometric provisional rank, hard negative/contradiction/property gates, missing-data penalties, human-review bands, and explicit abstention. It is not a probability and does not infer damage, coverage, claim validity, or outreach eligibility.
 - Authenticated score/list/rescore/override/version-registration/rollback APIs and leakage-controlled evaluation contracts are implemented. Synthetic and unauthorized/live retrievals cannot produce operational alerts; Sarasota live polling remains disabled.
 - Phase 5 focused scoring/evaluation tests, migration round-trip, verification contract, application/API checks, independent Luna review, and corrected high-severity findings are recorded in the Phase 5 review/handoff.
+- Phase 6 internal dashboard foundation provides Command Center, Incident Stream, Opportunities, Data Health, Settings, source posture, review queue, incident map, evidence workbench, and property-context surfaces.
+- Phase 6 browser states distinguish loading, API-unavailable, and empty data; manual Sarasota provenance, freshness limits, uncertainty, human-review requirements, and disabled live polling remain visible.
+- Phase 6 responsive navigation and keyboard-accessible controls were inspected at desktop and 390×844 mobile dimensions; the dashboard has no horizontal overflow and does not fabricate records, map points, property candidates, or scores.
+- Phase 6 verification, handoff, and independent Luna review are recorded in the Phase 6 execution/review/handoff documents.
 
 ## Explicitly not implemented
 
-Live Sarasota polling, cross-source deduplication, GIS/permit imports, empirical calibration, outcome capture, notifications, maps, final dashboard work, model lab, and consumer outreach.
+Live Sarasota polling, cross-source deduplication, GIS/permit imports, empirical calibration, outcome capture, notifications, live GIS/map data, model lab, production dashboard deployment, and consumer outreach.
 
 ## Environment evidence
 
 The host has Docker CLI but its configured Colima daemon is not running, and the Docker Compose plugin is not installed. Therefore the Compose definitions are present but PostgreSQL/PostGIS/Redis integration could not be truthfully claimed as executed in this environment. SQLite migration and application tests are the runnable local path. The parser also accepted a one-time current HTML response from the official Sarasota dispatch page for shape verification; that is not an authorization claim or an activated polling integration.
 
-The external-source approval gate remains intact. Dispatch processing accepts only retrievals explicitly labeled `manual_snapshot` or `synthetic_fixture`; property processing accepts manual/file workflows with an explicit authorization attestation for the official provider and labels synthetic fixture imports separately. No live polling is enabled or implied, no legal approval is invented, and acquisition mode is returned in import, retrieval, processing, incident, parcel, and match evidence. PostgreSQL/PostGIS and Redis execution remains unavailable on this host.
+The external-source approval gate remains intact. Dispatch processing accepts only retrievals explicitly labeled `manual_snapshot` or `synthetic_fixture`; property processing accepts manual/file workflows with an explicit authorization attestation for the official provider and labels synthetic fixture imports separately. No live polling is enabled or implied, no legal approval is invented, and acquisition mode is returned in import, retrieval, processing, incident, parcel, and match evidence. The Phase 6 browser surfaces read only the API health posture and do not bypass authentication or source gates. PostgreSQL/PostGIS and Redis execution remains unavailable on this host.
 
 ## Next controlled step
 
-Phase 6 — internal review workflow and dashboard foundation — is the next controlled step. It must preserve the Phase 5 evidence/provenance boundaries and must not add live polling, property automation, empirical model claims, or consumer outreach. Keep live Sarasota polling and the official property-source integration disabled until their external evidence gates are closed.
+Phase 7 — outcomes and evaluation foundation — is the next controlled step. It must preserve the Phase 6 evidence/provenance boundaries and must not add live polling, property automation, empirical model claims, or consumer outreach. Keep live Sarasota polling, official property automation, and production dashboard deployment disabled until their external evidence gates are closed.

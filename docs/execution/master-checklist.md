@@ -92,6 +92,19 @@
 - [ ] Official Sarasota property-source approval/terms evidence and approved real snapshot: external gate remains open.
 - [ ] PostgreSQL/PostGIS and Redis integration execution: Docker/Colima unavailable in this environment.
 
+## Phase 6 — Internal review workflow and dashboard
+
+- [x] Responsive internal shell covers Command Center, Incident Stream, Opportunities, Data Health, and Settings.
+- [x] Command Center exposes review queue, Sarasota source posture, incident map surface, evidence workbench, and property-context surface.
+- [x] Loading, API-unavailable, and empty states are explicit and do not fabricate incidents, map points, property candidates, or scores.
+- [x] Manual Sarasota snapshot provenance, freshness limits, uncertainty, human-review requirements, and disabled live polling remain visible.
+- [x] Responsive desktop/mobile layout and keyboard-accessible navigation were browser-inspected; mobile has no horizontal overflow.
+- [x] No sensational, probabilistic, damage, coverage, claim-validity, or consumer-contact language was introduced.
+- [x] Independent Luna review completed; critical/high findings addressed.
+- [x] Formatting, lint, type, unit, migration, API smoke, production build, and browser checks recorded in the Phase 6 handoff.
+- [x] Phase 6 handoff and execution/review documents recorded.
+- [ ] Production dashboard deployment, authenticated data workflows, live GIS, and external PostgreSQL/PostGIS/Redis integration remain later/external gates.
+
 ## Phase gate rule
 
-Phase 6 must not start until the Phase 5 handoff is accepted. Live Sarasota polling, official property automation, empirical calibration, outcome capture, notifications, Boca, Broadcastify, outreach, and later phases remain separately gated by their requirements.
+Phase 7 must not start until the Phase 6 handoff is accepted. Live Sarasota polling, official property automation, empirical calibration, outcome capture, notifications, Boca, Broadcastify, outreach, production dashboard deployment, and later phases remain separately gated by their requirements.

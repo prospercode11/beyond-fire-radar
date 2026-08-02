@@ -4,7 +4,7 @@ Beyond Fire Radar is an internal, research-only property-loss intelligence syste
 
 ## Current scope
 
-Phase 0 through Phase 5 — Sarasota incident intelligence, property resolution, and transparent scoring foundation — are complete in this repository:
+Phase 0 through Phase 6 — Sarasota incident intelligence, property resolution, transparent scoring foundation, and internal dashboard foundation — are complete in this repository:
 
 - Architecture, product, modeling, compliance, data, testing, execution, and handoff documents.
 - FastAPI modular-monolith API with SQLAlchemy and Alembic migrations.
@@ -15,9 +15,9 @@ Phase 0 through Phase 5 — Sarasota incident intelligence, property resolution,
 - Synthetic fixture metadata for repeatable foundation tests. Fixtures are never accuracy evidence.
 - Authorized manual CSV/HTML/JSON snapshot ingestion for the Sarasota dispatch source, with immutable raw preservation, versioned parsing, taxonomy, schema alerts, replay protection, and retrieval health.
 - Canonical Sarasota incidents with conservative deterministic/probabilistic linkage, source-row provenance, contradiction evidence, versioned classification, timelines, state transitions, rescore hooks, and audited merge/split controls.
-- Small Next.js TypeScript shell that reports foundation status.
+- Responsive Next.js TypeScript dashboard with Command Center, Incident Stream, Opportunities, Data Health, Settings, review queue, source posture, incident-map empty state, evidence workbench, property context, and explicit loading/error/empty states.
 
-Phase 4 provides a manual/file prototype for Sarasota property imports and explainable address-to-parcel resolution. Phase 5 adds a versioned, explainable, non-probability opportunity-ranking foundation with feature provenance, hard gates, abstention, review bands, as-of scoring, overrides, rescore history, and rollback through authenticated APIs. Official property-source approval, live polling, learned/calibrated scoring, outcome capture, dashboard work, notifications, Boca/Broadcastify, and outreach remain gated; repository fixtures are not real-world accuracy evidence.
+Phase 4 provides a manual/file prototype for Sarasota property imports and explainable address-to-parcel resolution. Phase 5 adds a versioned, explainable, non-probability opportunity-ranking foundation with feature provenance, hard gates, abstention, review bands, as-of scoring, overrides, rescore history, and rollback through authenticated APIs. Phase 6 adds a presentation-only dashboard; it does not add live GIS, authenticated domain reads, or fabricated records. Official property-source approval, live polling, learned/calibrated scoring, outcome capture, production dashboard deployment, notifications, Boca/Broadcastify, and outreach remain gated; repository fixtures are not real-world accuracy evidence.
 
 ## Local setup
 

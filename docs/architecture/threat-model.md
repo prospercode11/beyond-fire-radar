@@ -28,6 +28,9 @@
 | Stale derived property projection | Full imports rebuild aliases/buildings; rollback follows explicit import lineage; immutable property source rows remain available | Database-native concurrency and operational restore testing require PostgreSQL/integration environment |
 | Overconfident or irreproducible opportunity rank | Versioned release registry, as-of boundary, feature/source provenance, hard negative/contradiction/property gates, explicit abstention, human-review bands, append-only overrides, and predecessor rollback | No real outcome labels or calibration; the baseline is not a probability and cannot establish damage, coverage, claim validity, or outreach eligibility |
 | Unauthorized source-driven alert | Acquisition mode and authorization basis are persisted; synthetic/live/unauthorized retrievals cannot satisfy the alert gate; Sarasota live polling remains disabled | Written source approvals and production alert policy remain external gates |
+| Dashboard implies records or freshness that are not present | Explicit loading, API-unavailable, and empty states; Sarasota manual-source pill and disabled-live banner; browser health check is advisory | Authenticated domain reads, deployment controls, and production observability remain later hardening work |
+| Dashboard overstates map/property/score certainty | Map, workbench, and property surfaces remain empty until governed data exists; ranking copy says provisional/non-probability; no damage, coverage, claim-validity, or outreach claims | Human review and later outcomes/model gates are still required before operational use |
+| Browser treated as an authorization boundary | UI states that API role checks are authoritative; no browser-only sensitive record access or source activation control | Full authenticated dashboard workflows and production identity/MFA remain future work |
 
 ## Required production follow-up
 

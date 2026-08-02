@@ -25,7 +25,7 @@ flowchart LR
 4. Owner and organization data is restricted and is never automatically contacted.
 5. Model outputs are governed artifacts, not facts.
 
-## Phase 2 through Phase 5 request flow
+## Phase 2 through Phase 6 request flow
 
 ```mermaid
 sequenceDiagram
@@ -62,6 +62,9 @@ sequenceDiagram
   A->>DB: Load registered release, source/property evidence, hard gates, and current human override
   A->>DB: Persist score run, feature contributions, source IDs, explanation, and predecessor
   A-->>W: Non-probability score, evidence tier, abstention/alert gate, provenance, and review controls
+  U->>W: Review the internal command center or evidence workbench
+  W->>A: GET /healthz and, in later authenticated workflow work, governed domain read endpoints
+  A-->>W: API posture or source-preserving domain state; unavailable/empty states remain explicit
 ```
 
-Manual snapshot ingestion and Sarasota-only incident processing are the Phase 2/3 boundary. Phase 4 adds manual/file property workflows only. Phase 5 adds a non-probability evidence ranking over already imported Sarasota records; it does not add a source. Dispatch retrievals carry `manual_snapshot` or `synthetic_fixture` provenance; official property imports require an explicit authorization attestation and synthetic fixture imports are labeled separately. Live-collected input and automated official property retrieval remain disabled. The external approval gate is not removed or bypassed. No Boca radio, Broadcastify, empirical model, dashboard, or outreach source is in scope.
+Manual snapshot ingestion and Sarasota-only incident processing are the Phase 2/3 boundary. Phase 4 adds manual/file property workflows only. Phase 5 adds a non-probability evidence ranking over already imported Sarasota records; it does not add a source. Phase 6 adds a presentation-only internal dashboard with explicit loading, API-unavailable, empty, freshness, uncertainty, and human-review states; it does not add a live map feed or fabricate domain records. Dispatch retrievals carry `manual_snapshot` or `synthetic_fixture` provenance; official property imports require an explicit authorization attestation and synthetic fixture imports are labeled separately. Live-collected input and automated official property retrieval remain disabled. The external approval gate is not removed or bypassed. No Boca radio, Broadcastify, empirical model, production dashboard deployment, or outreach source is in scope.

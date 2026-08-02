@@ -52,13 +52,24 @@
 - Adversarial/API tests cover weak/negative events, missing or ambiguous property evidence, as-of boundaries, feature contributions, release registration, overrides, rescore, and rollback.
 - Real outcome labels, calibration, production alert authorization, PostgreSQL/PostGIS/Redis execution, and later dashboard/outcome workflows remain external or later-phase gates.
 
+## Phase 6 gate
+
+- Desktop visual inspection covers Command Center, Incident Stream, Opportunities, Data Health, Settings, review queue, source posture, incident map, evidence workbench, and property context.
+- Mobile inspection at the supported narrow breakpoint has responsive navigation, readable content, keyboard/focus-visible controls, and no horizontal overflow.
+- Loading, API-unavailable, and empty states are explicit; the browser does not fabricate incidents, map points, property candidates, opportunities, or scores.
+- Manual Sarasota snapshot provenance, source freshness limits, human-review requirements, and disabled live polling remain visible. No Boca, Broadcastify, live GIS, or automated source integration is used.
+- Copy review finds no unsupported probabilities, damage findings, coverage opinions, claim-validity conclusions, consumer-contact recommendations, or legal approval claims.
+- The API health check is advisory only; the API remains the authorization boundary and unavailable API state is safe and unambiguous.
+- Production dashboard deployment, authenticated record workflows, live map data, and PostgreSQL/PostGIS/Redis execution remain later or external gates.
+
 ## Test layers
 
 1. Unit: password/session hashing, provider contract behavior, fixture shape.
 2. Integration: migrations, auth flow, role checks, audit persistence, provider seeding.
 3. API smoke: health, one-time bootstrap, login, provider list, identity.
 4. Web build: TypeScript compilation and production Next.js build.
-5. Future end-to-end: approved snapshot import through review/outcome capture, only after the relevant later phases exist.
+5. Browser end-to-end: dashboard states, navigation, keyboard activation, desktop/mobile layout, and no-overflow checks.
+6. Future end-to-end: approved snapshot import through review/outcome capture, only after the relevant later phases exist.
 
 ## Future model evaluation
 
