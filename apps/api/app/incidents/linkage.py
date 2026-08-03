@@ -14,6 +14,8 @@ CLASSIFICATION_VERSION = "incident-classification.v1"
 MATCH_THRESHOLD = 0.88
 REVIEW_THRESHOLD = 0.62
 DETERMINISTIC_TIME_WINDOW_MINUTES = 90
+SAME_CASE_EVENT_UPDATE_WINDOW_MINUTES = DETERMINISTIC_TIME_WINDOW_MINUTES
+ALTERNATE_CASE_EVENT_DUPLICATE_WINDOW_MINUTES = 5
 MAX_CLUSTER_SPAN_HOURS = 24
 
 STATE_NEW = "Newly observed"
@@ -231,6 +233,19 @@ def _identifier_conflict(
                 and features["time_difference_minutes"] > DETERMINISTIC_TIME_WINDOW_MINUTES
             ) or features["address_similarity"] < 0.55:
                 return "reused_source_event_id"
+            # An event identifier is not a permanent incident identifier. Preserve delayed
+            # updates when the same agency case number agrees, but require alternate or
+            # missing case numbers to share an effectively identical event time. This keeps
+            # the Sarasota multi-agency duplicate-row case together without treating a reused
+            # shared event ID as one incident merely because its address is unchanged.
+            if features["time_difference_minutes"] is not None and features[
+                "time_difference_minutes"
+            ] > (
+                SAME_CASE_EVENT_UPDATE_WINDOW_MINUTES
+                if features["same_source_case_number"]
+                else ALTERNATE_CASE_EVENT_DUPLICATE_WINDOW_MINUTES
+            ):
+                return "reused_source_event_id"
         if (
             new.source_case_number
             and old.source_case_number
@@ -251,6 +266,20 @@ def _identifier_conflict(
 def _different_reliable_ids(
     new: DispatchObservation, old: DispatchObservation, features: dict[str, Any]
 ) -> bool:
+    # A source event identifier is stronger than an agency-local case number when
+    # the rest of the event identity agrees. This handles one dispatch event
+    # represented by multiple agency case numbers without weakening the reused-ID
+    # guard: materially different event times or locations are rejected above.
+    if (
+        features["same_source_event_id"]
+        and features["address_similarity"] >= 0.98
+        and features["event_family_agreement"] >= 0.8
+        and (
+            features["time_difference_minutes"] is None
+            or features["time_difference_minutes"] <= DETERMINISTIC_TIME_WINDOW_MINUTES
+        )
+    ):
+        return False
     same_agency = bool(new.agency and old.agency and new.agency == old.agency)
     if not same_agency:
         return False

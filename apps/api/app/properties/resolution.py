@@ -36,6 +36,13 @@ MARGIN_THRESHOLD = 0.10
 EXACT_MARGIN_THRESHOLD = 0.15
 
 
+def _utc_datetime(value: datetime) -> datetime:
+    """Treat database-naive timestamps as UTC before comparing them."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _similar(left: Optional[str], right: Optional[str]) -> Optional[float]:
     if not left or not right:
         return None
@@ -140,6 +147,27 @@ def _property_address(parcel: Parcel) -> NormalizedAddress:
         postal_code=parcel.postal_code,
         unit=parcel.unit,
     )
+
+
+def _address_core_matches(left: NormalizedAddress, right: NormalizedAddress) -> bool:
+    """Match the address components both sources actually supplied."""
+    if not left.house_number or not right.house_number:
+        return False
+    if left.house_number != right.house_number or left.street_name != right.street_name:
+        return False
+    if left.street_type and right.street_type and left.street_type != right.street_type:
+        return False
+    if left.street_prefix and right.street_prefix and left.street_prefix != right.street_prefix:
+        return False
+    if left.street_suffix and right.street_suffix and left.street_suffix != right.street_suffix:
+        return False
+    if left.unit and left.unit != right.unit:
+        return False
+    if left.municipality and right.municipality and left.municipality != right.municipality:
+        return False
+    if left.postal_code and right.postal_code and left.postal_code != right.postal_code:
+        return False
+    return True
 
 
 def _candidate_pool(
@@ -255,8 +283,13 @@ def _score_candidate(
     float, dict[str, Optional[float]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]
 ]:
     property_address = _property_address(parcel)
+    address_core_matches = _address_core_matches(incident_address, property_address)
     values: dict[str, Optional[float]] = {
-        "address_exact": 1.0 if incident_address.normalized == property_address.normalized else 0.0,
+        "address_exact": (
+            1.0
+            if incident_address.normalized == property_address.normalized or address_core_matches
+            else 0.0
+        ),
         "house_number_agreement": 1.0
         if incident_address.house_number
         and incident_address.house_number == property_address.house_number
@@ -372,7 +405,8 @@ def _score_candidate(
         "source_version": parcel.source_version,
         "stale": bool(
             parcel.effective_at
-            and parcel.effective_at < datetime.now(timezone.utc) - timedelta(days=730)
+            and _utc_datetime(parcel.effective_at)
+            < datetime.now(timezone.utc) - timedelta(days=730)
         ),
         "address_warnings": list(property_address.warnings),
     }
@@ -401,6 +435,10 @@ def run_property_match(
     )
     if current_import is None or current_import.provider_id != property_provider_id:
         raise ValueError("no current property import is available for this provider")
+    if not current_import.is_current:
+        raise ValueError(
+            "historical property imports cannot be used for new matches; select the current import"
+        )
     incident_address, latitude, longitude, observation_ids = _incident_address(db, incident)
     run = IncidentPropertyMatchRun(
         id=str(uuid4()),

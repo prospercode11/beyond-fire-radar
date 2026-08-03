@@ -1,6 +1,6 @@
 # Current state
 
-Updated: 2026-08-02 after guarded Sarasota polling activation verification
+Updated: 2026-08-03 after Sarasota property/incident issue-fix verification
 Scope: Phase 0 through Phase 10 v1 closure plus local Sarasota polling runtime activation
 
 ## Implemented
@@ -52,6 +52,9 @@ Scope: Phase 0 through Phase 10 v1 closure plus local Sarasota polling runtime a
 - Guarded Sarasota live polling is implemented as an explicit local-development runtime activation: the official provider uses a normal HTTPS GET, persists `live_poll` provenance, uses a database lease to prevent overlapping workers, polls immediately at startup, then every exactly 900 seconds, and records success/failure/skip audit events.
 - The live polling worker is enabled only in the local `.env` with the exact non-legal basis `explicit_user_permission`. Production and staging deployment templates remain disabled and require a recorded `LegalApproval` before activation. The worker does not bypass CAPTCHA, access controls, rate limits, or source terms.
 - The standalone web test server defaults to a same-origin `/api-backend` proxy for local API access, avoiding browser restrictions on direct cross-port requests; deployments may continue to override `NEXT_PUBLIC_API_BASE_URL` for an external API origin. Workspace loading ignores stale overlapping responses so a transient session or network failure cannot overwrite a successful live status.
+- The 2026-08-03 issue-fix pass surfaces the current Sarasota property snapshot in the incident workbench, exposes acquisition/authorization/hash provenance, and provides an explicit current-snapshot match action that rescored the selected incident.
+- Property matching treats database-naive effective timestamps as UTC, parses five-digit street numbers without mistaking them for ZIP codes, and compares the address components actually supplied by dispatch/property records. New matches reject non-current imports rather than claiming historical data while using current parcel projections.
+- Incident linkage keeps exact same-time duplicate Sarasota rows together, allows same-agency-case updates through the existing 90-minute window, and treats alternate/missing-case reused source event identifiers more than five minutes apart as a deterministic non-match even at the same address. `scripts/repair_sarasota_duplicate_incidents.py` provides a dry-run-first, exact-key, audited repair path for legacy duplicates.
 
 ## Explicitly not implemented
 
@@ -62,6 +65,14 @@ Production/staging Sarasota live polling without a recorded `LegalApproval`, aut
 The host has Docker CLI but its configured Colima daemon is not running, and the Docker Compose plugin is not installed. Therefore the Compose definitions are present but PostgreSQL/PostGIS/Redis integration could not be truthfully claimed as executed in this environment. SQLite migration and application tests are the runnable local path. The official Sarasota dispatch page was retrieved through the implemented normal HTTPS adapter and parsed successfully for the local operator-authorized polling check; that is not a legal approval, source-license determination, or production activation.
 
 The external-source approval gate remains intact. Manual snapshots and fixtures remain available, while live records are explicitly labeled `live_poll` and are processable only when the runtime approval decision allows them. Local development allows the exact operator basis `explicit_user_permission` supplied for this activation; this is not a legal approval. Production and staging fail closed until a persisted `LegalApproval` is approved and timestamped. The live adapter performs only a normal HTTPS GET and the scheduler requires the 900-second minimum interval, a database lease, and audit/provenance records. Property processing accepts manual/file workflows with an explicit authorization attestation for the official provider and labels synthetic fixture imports separately. Acquisition mode is returned in import, retrieval, processing, incident, parcel, and match evidence. Internal client-roster files are explicitly labeled internal manual reference data and are not approval evidence. The authenticated browser uses the same-origin local proxy or the configured API origin and does not bypass source gates. Phase 7 alerts continue to require explicitly authorized manual dispatch evidence, eligible score hard gates, resolved property evidence, and no suppression; live-poll evidence does not create operational alerts. Production still requires PostgreSQL/PostGIS, Redis, S3/R2, HTTPS, explicit hosts, managed identity/MFA, and deployment-owner recovery exercises; those services and approvals remain unavailable or external on this host.
+
+## 2026-08-03 issue-fix verification
+
+- The selected real Sarasota incident `11704 ALTAMONTE CT` is one active canonical incident with 39 retained observations after the audited legacy merge and replay.
+- Current manual property import `sarasota.scpa.2026-08-02` is visible in the workbench with 324,924 accepted rows, `manual_snapshot`/`manual_attestation`, and the content hash prefix. Matching returns parcel `0758080452` at score `1.000`; the current score is `55.990`, `Review Only`, and `fit_evidence_missing`. The hard gate is intentional because Beyond Adjusting fit evidence is not available.
+- The latest Sarasota replay processed 61 observations with `linked_count=61`, `new_incident_count=0`, `review_count=0`, and `contradiction_count=0`; active incidents remained at 84 and the target remained one incident.
+- The duplicate maintenance scan reports no remaining exact duplicate groups after five audited merges. The merge records and source rows remain inspectable in the local database.
+- Verification passed: `./scripts/verify.sh` (67 tests, Ruff, mypy, web lint/build), `./.venv/bin/python scripts/dev.py migrate`, `./.venv/bin/python scripts/dev.py api-smoke`, isolated `scripts/e2e_acceptance.py`, browser verification on `http://127.0.0.1:3021/`, and the Sarasota replay/API check. The host still lacks runnable PostgreSQL/PostGIS/Redis services.
 
 ## Next controlled step
 

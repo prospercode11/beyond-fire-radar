@@ -4,6 +4,7 @@ import io
 import json
 import zipfile
 from pathlib import Path
+from typing import Optional
 
 from app.properties.address import normalize_address
 from app.properties.importers import iter_normalized_csv_file, parse_property_file
@@ -25,20 +26,27 @@ def _property_file() -> tuple[str, bytes]:
 
 
 def _import_properties(
-    client: TestClient, headers: dict[str, str], *, key: str = "property-import-1"
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    key: str = "property-import-1",
+    effective_at: Optional[str] = None,
 ) -> dict:
     filename, payload = _property_file()
+    data = {
+        "provider_id": "fixture.sarasota.property_appraiser",
+        "source_version": "fixture-property-2026-01",
+        "idempotency_key": key,
+        "import_mode": "full",
+        "authorized_snapshot": "false",
+    }
+    if effective_at:
+        data["effective_at"] = effective_at
     response = client.post(
         "/api/v1/properties/imports",
         headers=headers,
         files={"file": (filename, payload, "text/csv")},
-        data={
-            "provider_id": "fixture.sarasota.property_appraiser",
-            "source_version": "fixture-property-2026-01",
-            "idempotency_key": key,
-            "import_mode": "full",
-            "authorized_snapshot": "false",
-        },
+        data=data,
     )
     response.raise_for_status()
     return response.json()
@@ -86,6 +94,11 @@ def test_address_normalization_handles_precision_and_variants() -> None:
     assert exact.street_type == "AVENUE"
     assert exact.municipality == "SARASOTA"
     assert exact.postal_code == "34236"
+    dispatch_style = normalize_address("11704 ALTAMONTE CT")
+    assert dispatch_style.precision == "exact_address"
+    assert dispatch_style.house_number == "11704"
+    assert dispatch_style.postal_code is None
+    assert dispatch_style.normalized == "11704 ALTAMONTE COURT"
 
     unit = normalize_address("400 OAK AVE UNIT 2")
     assert unit.precision == "exact_address_with_unit"
@@ -206,10 +219,13 @@ def test_property_import_replay_partial_failure_full_removal_and_rollback(
 
 def test_property_match_exposes_evidence_and_preserves_human_decision(client: TestClient) -> None:
     headers = _auth(client)
-    _import_properties(client, headers, key="property-match-import")
-    incident_id = _create_incident(
-        client, headers, "100 Example Avenue, Sarasota, FL 34236", "match-exact"
+    _import_properties(
+        client,
+        headers,
+        key="property-match-import",
+        effective_at="2026-01-15T14:22:00Z",
     )
+    incident_id = _create_incident(client, headers, "100 Example Avenue", "match-exact")
     run = client.post(
         f"/api/v1/incidents/{incident_id}/property-matches",
         headers=headers,
@@ -249,6 +265,45 @@ def test_property_match_exposes_evidence_and_preserves_human_decision(client: Te
     )
     cleared.raise_for_status()
     assert cleared.json()["decision"] == "cleared"
+
+
+def test_historical_property_import_cannot_be_used_for_a_new_match(client: TestClient) -> None:
+    headers = _auth(client)
+    first = _import_properties(client, headers, key="property-historical-1")
+    replacement = client.post(
+        "/api/v1/properties/imports",
+        headers=headers,
+        files={
+            "file": (
+                "replacement.csv",
+                b"parcel_id,situs_address\nPARCEL-EX100,100 EXAMPLE AVE\n",
+                "text/csv",
+            )
+        },
+        data={
+            "provider_id": "fixture.sarasota.property_appraiser",
+            "source_version": "fixture-property-2026-02",
+            "idempotency_key": "property-historical-2",
+            "import_mode": "full",
+            "authorized_snapshot": "false",
+        },
+    )
+    replacement.raise_for_status()
+    second = replacement.json()
+    incident_id = _create_incident(client, headers, "100 Example Avenue", "match-historical")
+
+    response = client.post(
+        f"/api/v1/incidents/{incident_id}/property-matches",
+        headers=headers,
+        json={
+            "property_provider_id": "fixture.sarasota.property_appraiser",
+            "property_import_id": first["property_import_id"],
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    assert "historical property imports" in response.json()["detail"]
+    assert second["property_import_id"] != first["property_import_id"]
 
 
 def test_property_match_abstains_for_unit_ambiguity(client: TestClient) -> None:

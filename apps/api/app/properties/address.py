@@ -71,7 +71,12 @@ def _clean(value: object) -> str:
 
 def _postal(value: object) -> Optional[str]:
     cleaned = _clean(value)
-    match = re.search(r"\b(\d{5}(?:-\d{4})?)\b", cleaned)
+    if not cleaned:
+        return None
+    # A five-digit street number is common in Sarasota records. Postal codes are
+    # treated as the final token when parsing a complete address so a leading
+    # house number such as 11704 is never mistaken for a ZIP code.
+    match = re.search(r"\b(\d{5}(?:-\d{4})?)\b\s*$", cleaned)
     return match.group(1) if match else None
 
 

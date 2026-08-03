@@ -1,7 +1,7 @@
 # Phase 3 — Incident intelligence
 
 Status: complete for the Sarasota manual/fixture prototype boundary
-Updated: 2026-07-31
+Updated: 2026-08-03 after issue-fix verification
 
 ## Scope and guardrails
 
@@ -20,6 +20,7 @@ The external-source approval gate remains intact. `ProviderRetrieval.acquisition
 - Incident state values follow the specification: Newly observed, Awaiting corroboration, Property unresolved, Likely structure-related, High-confidence structure-related, Disposition pending, Confirmed meaningful incident, Downgraded, False alarm, Closed, Suppressed. Invalid transitions are rejected and valid manual transitions are audited.
 - New observations are processed incrementally. Linkage/classification versions and retrieval-level processing runs are persisted; `POST /api/v1/incidents/{id}/rescore` creates a timeline rescore event and preserves prior evidence.
 - Merge and split endpoints preserve raw rows, observation IDs, old assignment history, reasons, actors, timelines, and audit events.
+- The linkage guard allows same-agency-case updates through the existing 90-minute window, while alternate or missing case numbers with a reused source event identifier are separate after five minutes even when the normalized address is identical. Exact-time alternate agency case numbers remain mergeable when the event family and location agree. The legacy repair command `scripts/repair_sarasota_duplicate_incidents.py` is dry-run-first and records any exact source-event/location/time repairs through the existing audited merge service.
 
 ## API surface
 
@@ -38,6 +39,12 @@ The external-source approval gate remains intact. `ProviderRetrieval.acquisition
 - Isolated application startup on `127.0.0.1:8001` passed health and `scripts/api_smoke.py`; the smoke test processes and replays the Sarasota-shaped fixture and verifies the canonical incident count does not increase.
 - Ruff formatting/checks and mypy passed. The required verification script is run again at handoff.
 - PostgreSQL/PostGIS and Redis integration execution remains unavailable because Docker/Colima is not running; this limitation is carried forward rather than claimed as passed.
+
+## 2026-08-03 maintenance verification
+
+- Replayed the current Sarasota retrieval after the linkage fix: 61 observations linked, zero new incidents, zero review assignments, and zero contradictions; the active ledger remained stable at 84.
+- Audited legacy duplicate repair merged five exact source-event/location/time groups; a subsequent dry-run found no remaining eligible groups. The pre-existing `11704 ALTAMONTE CT` repair remains separately recorded with 39 retained source observations.
+- Added regression coverage for same-address reused identifiers 30 minutes apart, same-case delayed updates, alternate case numbers for one exact-time event, exact-key repair revalidation, and malformed/normalization/timezone property resolution behavior. Full verification and isolated E2E acceptance passed.
 
 ## Gate
 

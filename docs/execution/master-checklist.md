@@ -76,7 +76,15 @@
 - [x] Independent Luna review completed; critical/high findings addressed.
 - [x] Phase 3 formatting, lint, type, unit, migration, API smoke, and relevant end-to-end checks recorded.
 - [x] Phase 3 handoff and execution documents recorded.
+- [x] 2026-08-03 issue-fix closure: reused same-address identifiers are time-guarded, legacy exact duplicates have a dry-run-first audited repair path, and Sarasota replay remains idempotent.
 - [ ] PostgreSQL/PostGIS and Redis integration execution: Docker/Colima unavailable in this environment.
+
+## 2026-08-03 issue-fix closure
+
+- [x] Current Sarasota property snapshot visibility and provenance labels verified in the authenticated workbench.
+- [x] Property upload/import now reaches match and rescore; non-404 failures surface to the operator; historical import matching is guarded.
+- [x] UTC-naive effective-time handling, street-number/postal normalization, reused-ID separation, duplicate repair, replay idempotency, full verification, isolated E2E, API checks, and browser checks recorded in `docs/handoffs/issue-fix-2026-08-03.md`.
+- [x] Independent Luna review and remediation are recorded in `docs/reviews/issue-fix-2026-08-03-review.md`.
 
 ## Phase 4 — Property ingestion and resolution
 

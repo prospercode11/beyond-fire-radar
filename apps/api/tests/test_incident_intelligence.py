@@ -2,9 +2,16 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 
+from app.incidents.linkage import choose_linkage
 from fastapi.testclient import TestClient
+from scripts.repair_sarasota_duplicate_incidents import (
+    _duplicate_key,
+    _observations_match_key,
+)
 
 from .test_auth import bootstrap
 
@@ -175,6 +182,121 @@ def test_source_identity_is_scoped_to_provider(client: TestClient) -> None:
     ).json()
     assert len(official_incidents) == 1
     assert len(fixture_incidents) == 1
+
+
+def test_shared_event_id_overrides_alternate_case_number_when_event_identity_agrees() -> None:
+    event_time = datetime(2026, 7, 31, 10, tzinfo=timezone.utc)
+    base = {
+        "event_time": event_time,
+        "original_location": "100 Main Street, Sarasota, FL",
+        "source_event_id": "E-SHARED-EVENT",
+        "agency": "SCFD",
+        "normalized_event_family": "General structure fire",
+        "original_event_type": "STRUCTURE FIRE",
+        "grid": "G1",
+        "station": "STA 1",
+    }
+    existing = SimpleNamespace(
+        **base,
+        source_record_id="record-1",
+        source_case_number="SCFD-CASE-1",
+    )
+    alternate_case = SimpleNamespace(
+        **base,
+        source_record_id="record-2",
+        source_case_number="SCFD-CASE-2",
+    )
+
+    choice = choose_linkage(alternate_case, [(SimpleNamespace(id="incident-1"), [existing])])
+
+    assert choice.decision == "match"
+    assert choice.stage == "deterministic"
+    assert choice.explanation["reason"] == (
+        "exact agency event identifier with compatible time and location"
+    )
+
+
+def test_reused_event_id_at_same_address_but_different_time_is_separate() -> None:
+    existing = SimpleNamespace(
+        event_time=datetime(2026, 7, 31, 10, tzinfo=timezone.utc),
+        original_location="100 Main Street, Sarasota, FL",
+        source_event_id="E-REUSED-SAME-ADDRESS",
+        source_case_number="SCFD-CASE-1",
+        source_record_id="record-1",
+        agency="SCFD",
+        normalized_event_family="General structure fire",
+        original_event_type="STRUCTURE FIRE",
+        grid="G1",
+        station="STA 1",
+    )
+    later = SimpleNamespace(
+        event_time=datetime(2026, 7, 31, 10, 30, tzinfo=timezone.utc),
+        original_location="100 Main Street, Sarasota, FL",
+        source_event_id="E-REUSED-SAME-ADDRESS",
+        source_case_number="SCFD-CASE-2",
+        source_record_id="record-2",
+        agency="SCFD",
+        normalized_event_family="General structure fire",
+        original_event_type="STRUCTURE FIRE",
+        grid="G1",
+        station="STA 1",
+    )
+
+    choice = choose_linkage(later, [(SimpleNamespace(id="incident-1"), [existing])])
+
+    assert choice.decision == "non_match"
+    assert choice.stage == "deterministic_guard"
+    assert choice.explanation["reason"] == "reused_source_event_id"
+
+
+def test_same_case_event_update_within_conservative_window_remains_linked() -> None:
+    existing = SimpleNamespace(
+        event_time=datetime(2026, 7, 31, 10, tzinfo=timezone.utc),
+        original_location="100 Main Street, Sarasota, FL",
+        source_event_id="E-DELAYED-UPDATE",
+        source_case_number="SCFD-CASE-1",
+        source_record_id="record-1",
+        agency="SCFD",
+        normalized_event_family="General structure fire",
+        original_event_type="STRUCTURE FIRE",
+        grid="G1",
+        station="STA 1",
+    )
+    update = SimpleNamespace(
+        event_time=datetime(2026, 7, 31, 10, 6, tzinfo=timezone.utc),
+        original_location="100 Main Street, Sarasota, FL",
+        source_event_id="E-DELAYED-UPDATE",
+        source_case_number="SCFD-CASE-1",
+        source_record_id="record-2",
+        agency="SCFD",
+        normalized_event_family="General structure fire",
+        original_event_type="STRUCTURE FIRE",
+        grid="G1",
+        station="STA 1",
+    )
+
+    choice = choose_linkage(update, [(SimpleNamespace(id="incident-1"), [existing])])
+
+    assert choice.decision == "match"
+    assert choice.stage == "deterministic"
+
+
+def test_duplicate_repair_requires_every_observation_to_share_the_exact_key() -> None:
+    first = SimpleNamespace(
+        event_time=datetime(2026, 7, 31, 10, tzinfo=timezone.utc),
+        original_location="100 Main Street, Sarasota, FL",
+        source_event_id="E-REPAIR-KEY",
+    )
+    unrelated = SimpleNamespace(
+        event_time=datetime(2026, 7, 31, 10, 1, tzinfo=timezone.utc),
+        original_location="200 Pine Street, Sarasota, FL",
+        source_event_id="E-REPAIR-KEY",
+    )
+    key = _duplicate_key("sarasota.official_dispatch", first)
+
+    assert key is not None
+    assert _observations_match_key("sarasota.official_dispatch", [first], key)
+    assert not _observations_match_key("sarasota.official_dispatch", [first, unrelated], key)
 
 
 def test_adversarial_deduplication_preserves_contradictions_and_separates_reused_ids(

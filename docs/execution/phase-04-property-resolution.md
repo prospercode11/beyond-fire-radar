@@ -1,6 +1,7 @@
 # Phase 4 — Property ingestion and entity resolution
 
 Status: complete — accepted for the local/manual prototype gate; official property-source approval remains open
+Updated: 2026-08-03 after property issue-fix verification
 
 ## Scope and boundaries
 
@@ -26,3 +27,7 @@ The Phase 4 local/manual gate passes: executable evaluation cases select the fix
 ## 2026-08-02 manual Sarasota snapshot
 
 An operator-supplied snapshot from the official Sarasota Property Appraiser download listings was imported through the bounded, audited file workflow’s streaming normalized-CSV command. The parcel/sales ZIP, detailed ZIP, normalized import, and official parcel GIS layer are recorded with hashes and row-level provenance in `docs/data/source-registry.md` and `docs/handoffs/sarasota-property-manual-import-2026-08-02.md`. The import is labeled `manual_snapshot` with `manual_attestation`; it does not create legal approval, source-terms evidence, automated property polling, or a real-world accuracy claim.
+
+## 2026-08-03 issue-fix verification
+
+The authenticated workbench now lists the current snapshot and explicitly matches it before rescoring. The property panel displays source version, accepted-row count, acquisition mode, authorization basis, and content-hash prefix. Matching normalizes database-naive effective timestamps as UTC and accepts the components both sides supplied, so `11704 ALTAMONTE CT` matches the current Sarasota parcel snapshot without treating the street number as a postal code. A historical import ID is rejected for new matching unless it is the current provider projection; this prevents a historical provenance label from being paired with current parcel data. Upload/import, match, and rescore errors are visible to the operator. The score remains a versioned review-only ranking when fit evidence is absent.
