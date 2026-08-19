@@ -79,18 +79,29 @@ jobs:
           $env:ALLOWED_HOSTS = "127.0.0.1,localhost"
           $env:ENABLE_API_DOCS = "false"
           $backend = Resolve-Path "desktop/.build/backend/beyond-fire-radar-backend/beyond-fire-radar-backend.exe"
-          $process = Start-Process -FilePath $backend -ArgumentList "serve" -PassThru -WindowStyle Hidden
+          $stdout = Join-Path $work "backend.stdout.log"
+          $stderr = Join-Path $work "backend.stderr.log"
+          $process = Start-Process -FilePath $backend -ArgumentList "serve" -PassThru `
+            -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr
           try {
             $ready = $false
             foreach ($attempt in 1..120) {
+              $process.Refresh()
+              if ($process.HasExited) { break }
               try {
-                $response = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:28741/readyz"
+                $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 "http://127.0.0.1:28741/readyz"
                 if ($response.StatusCode -eq 200) { $ready = $true; break }
               } catch { Start-Sleep -Milliseconds 500 }
             }
-            if (-not $ready) { throw "Packaged backend did not become ready" }
+            if (-not $ready) {
+              if (Test-Path $stdout) { Get-Content $stdout }
+              if (Test-Path $stderr) { Get-Content $stderr }
+              throw "Packaged backend did not become ready; exited=$($process.HasExited) code=$($process.ExitCode)"
+            }
           } finally {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            }
           }
           if (-not (Test-Path (Join-Path $work "alerts.db"))) { throw "Migrated database was not created" }
 
