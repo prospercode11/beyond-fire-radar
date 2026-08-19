@@ -20,7 +20,7 @@ Implemented endpoints:
 - `GET /api/v1/retrievals/{retrieval_id}/schema-alerts`
 - `GET /api/v1/retrievals/{retrieval_id}/errors`
 
-The parser preserves source wording, source case/event identifiers, original location, grid/zone, raw payload bytes, row payloads, parser/taxonomy versions, and retrieval timestamps. It classifies only explicit source-supported event wording; unsupported wording is retained as `Unknown fire situation` rather than promoted to a working-fire claim.
+The parser preserves source wording, source case/event identifiers, original location, grid/zone, raw payload bytes, row payloads, parser/taxonomy versions, and retrieval timestamps. It classifies only explicit source-supported event wording; a generic source label such as `FIRE` is retained as `General fire`, Sarasota rescue/hazmat/gas-odor/electrical vocabulary receives explicit non-fire families, and explicit fire wording receives fire families. Unsupported wording is retained as `Unknown fire situation` rather than promoted to a working-fire claim.
 
 ## Acceptance gate
 

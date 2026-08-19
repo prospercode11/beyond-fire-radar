@@ -114,8 +114,7 @@ def import_snapshot(
     if not authorized_snapshot:
         raise PermissionError("an explicit manual snapshot attestation is required")
     content_hash = _sha256(path)
-    payload = path.read_bytes()
-    if hashlib.sha256(payload).hexdigest() != content_hash:
+    if _sha256(path) != content_hash:
         raise ValueError("source CSV changed while it was being read")
 
     with SessionLocal() as db:
@@ -175,7 +174,7 @@ def import_snapshot(
             .where(PropertyImport.provider_id == provider_id, PropertyImport.is_current.is_(True))
             .order_by(PropertyImport.created_at.desc())
         )
-        raw_reference = _store_payload(settings, provider_id, content_hash, payload)
+        raw_reference = _store_payload_file(settings, provider_id, content_hash, path)
         now = datetime.now(timezone.utc)
         import_id = str(uuid4())
         import_record = PropertyImport(
@@ -189,14 +188,14 @@ def import_snapshot(
             content_hash=content_hash,
             content_type="text/csv",
             source_version=source_version,
-            parser_version=PROPERTY_PARSER_VERSION,
-            schema_version=PROPERTY_SCHEMA_VERSION,
+            parser_version=provider.parser_version or PROPERTY_PARSER_VERSION,
+            schema_version=provider.schema_version or PROPERTY_SCHEMA_VERSION,
             acquisition_mode="manual_snapshot",
             authorization_basis="manual_attestation",
             effective_at=effective_at,
             retrieved_at=now,
             raw_payload_reference=raw_reference,
-            byte_size=len(payload),
+            byte_size=path.stat().st_size,
             created_by=user.id,
         )
         db.add(import_record)
@@ -479,6 +478,12 @@ def _store_payload(settings: Any, provider_id: str, content_hash: str, payload: 
     from app.providers.storage import build_snapshot_store
 
     return build_snapshot_store(settings).put(provider_id, content_hash, payload)
+
+
+def _store_payload_file(settings: Any, provider_id: str, content_hash: str, path: Path) -> str:
+    from app.providers.storage import build_snapshot_store
+
+    return build_snapshot_store(settings).put_file(provider_id, content_hash, path)
 
 
 def main() -> None:

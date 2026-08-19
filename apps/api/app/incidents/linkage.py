@@ -10,7 +10,7 @@ from typing import Any, Iterable, Optional
 from app.models import CanonicalIncident, DispatchObservation
 
 LINKAGE_VERSION = "incident-linkage.v1"
-CLASSIFICATION_VERSION = "incident-classification.v1"
+CLASSIFICATION_VERSION = "incident-classification.v2"
 MATCH_THRESHOLD = 0.88
 REVIEW_THRESHOLD = 0.62
 DETERMINISTIC_TIME_WINDOW_MINUTES = 90
@@ -419,12 +419,26 @@ def choose_linkage(
                 "model": "explainable weighted baseline; not machine learning",
             },
         )
-        result_is_guard = result.stage == "deterministic_guard"
-        best_is_guard = best is not None and best.stage == "deterministic_guard"
+
+        # A deterministic guard applies to the candidate it guarded. It must not
+        # outrank an unrelated candidate that actually matched this observation.
+        # This matters when a reused source identifier is present on one stale
+        # duplicate while the exact event exists on another active incident.
+        def decision_priority(item: LinkageDecision) -> int:
+            if item.decision == "match":
+                return 3
+            if item.decision == "possible_match":
+                return 2
+            if item.stage == "deterministic_guard":
+                return 1
+            return 0
+
+        result_priority = decision_priority(result)
+        best_priority = decision_priority(best) if best is not None else -1
         if (
             best is None
-            or (result_is_guard and not best_is_guard)
-            or (result_is_guard == best_is_guard and result.score > best.score)
+            or result_priority > best_priority
+            or (result_priority == best_priority and result.score > best.score)
         ):
             best = result
     if best is not None:

@@ -6,9 +6,11 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
+import app.main as main_module
 from app.properties.address import normalize_address
 from app.properties.importers import iter_normalized_csv_file, parse_property_file
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 
 def _auth(client: TestClient) -> dict[str, str]:
@@ -83,7 +85,11 @@ def _create_incident(
         "/api/v1/incidents?provider_id=fixture.sarasota.dispatch", headers=headers
     )
     incidents.raise_for_status()
-    return incidents.json()[-1]["id"]
+    matching_incidents = [
+        incident for incident in incidents.json() if incident["canonical_location"] == location
+    ]
+    assert len(matching_incidents) == 1
+    return matching_incidents[0]["id"]
 
 
 def test_address_normalization_handles_precision_and_variants() -> None:
@@ -94,6 +100,11 @@ def test_address_normalization_handles_precision_and_variants() -> None:
     assert exact.street_type == "AVENUE"
     assert exact.municipality == "SARASOTA"
     assert exact.postal_code == "34236"
+    international_display = normalize_address("2323 W State Rd 84, Fort Lauderdale, FL 33312, USA")
+    assert international_display.precision == "exact_address"
+    assert international_display.municipality == "FORT LAUDERDALE"
+    assert international_display.postal_code == "33312"
+    assert international_display.normalized == "2323 W STATE ROAD FORT LAUDERDALE 33312"
     dispatch_style = normalize_address("11704 ALTAMONTE CT")
     assert dispatch_style.precision == "exact_address"
     assert dispatch_style.house_number == "11704"
@@ -113,6 +124,14 @@ def test_address_normalization_handles_precision_and_variants() -> None:
     assert county_road.street_name == "COUNTY ROAD 41"
     assert normalize_address("MAIN ST & OAK AVE").precision == "intersection"
     assert normalize_address("US 41 N near airport").precision == "highway"
+
+    ordinal = normalize_address("1840 NW 33rd St, Pompano Beach, FL 33064, USA")
+    assert ordinal.street_name == "33"
+    assert ordinal.normalized == "1840 NW 33 STREET POMPANO BEACH 33064"
+
+    city_named_street = normalize_address("3816 Hollywood Blvd, Hollywood, FL 33021, USA")
+    assert city_named_street.street_name == "HOLLYWOOD"
+    assert city_named_street.normalized == "3816 HOLLYWOOD BOULEVARD HOLLYWOOD 33021"
 
 
 def test_property_parser_supports_xlsx_zip_and_mapping() -> None:
@@ -234,9 +253,49 @@ def test_property_match_exposes_evidence_and_preserves_human_decision(client: Te
     run.raise_for_status()
     run_data = run.json()
     assert run_data["status"] == "matched"
+    assert run_data["candidate_count"] == 1
     assert run_data["candidates"][0]["classification"] == "exact"
     assert run_data["candidates"][0]["parcel"]["parcel_id"] == "PARCEL-EX100"
-    assert run_data["candidates"][0]["explanation"]["matcher_version"] == "property-match.v1"
+    assert run_data["candidates"][0]["explanation"]["matcher_version"] == "property-match.v5"
+    with main_module.SessionLocal() as db:
+        plan = db.execute(
+            text(
+                "EXPLAIN QUERY PLAN SELECT id FROM parcels "
+                "WHERE provider_id = :provider_id AND is_active = 1 "
+                "AND house_number = :house_number AND street_name = :street_name "
+                "AND street_type = :street_type"
+            ),
+            {
+                "provider_id": "fixture.sarasota.property_appraiser",
+                "house_number": "100",
+                "street_name": "EXAMPLE",
+                "street_type": "AVENUE",
+            },
+        ).all()
+    assert "ix_parcels_provider_active_address_core" in " ".join(str(item) for item in plan)
+    with main_module.SessionLocal() as db:
+        relationship_plan = db.execute(
+            text(
+                "EXPLAIN QUERY PLAN SELECT id FROM parcels "
+                "WHERE provider_id = :provider_id AND is_active = 1 "
+                "AND master_parcel_id = :master_parcel_id"
+            ),
+            {
+                "provider_id": "fixture.sarasota.property_appraiser",
+                "master_parcel_id": "PARCEL-EX100",
+            },
+        ).all()
+    assert "ix_parcels_provider_active_master_parcel" in " ".join(
+        str(item) for item in relationship_plan
+    )
+
+    repeated = client.post(
+        f"/api/v1/incidents/{incident_id}/property-matches",
+        headers=headers,
+        json={"property_provider_id": "fixture.sarasota.property_appraiser"},
+    )
+    repeated.raise_for_status()
+    assert repeated.json()["id"] == run_data["id"]
 
     candidate_id = run_data["candidates"][0]["id"]
     decision = client.post(
@@ -256,6 +315,7 @@ def test_property_match_exposes_evidence_and_preserves_human_decision(client: Te
         json={"property_provider_id": "fixture.sarasota.property_appraiser"},
     )
     reprocessed.raise_for_status()
+    assert reprocessed.json()["id"] != run_data["id"]
     assert reprocessed.json()["current_human_decision"]["decision"] == "confirmed"
 
     cleared = client.post(
@@ -320,3 +380,130 @@ def test_property_match_abstains_for_unit_ambiguity(client: TestClient) -> None:
     assert data["status"] == "abstained"
     assert data["abstention_reason"] == "unit_ambiguity"
     assert any(item["is_abstained"] for item in data["candidates"])
+
+
+def test_broward_address_variants_resolve_without_guessing_an_owner(
+    client: TestClient,
+) -> None:
+    headers = _auth(client)
+    payload = b"""parcel_id,situs_address,municipality,zip,property_use_category,number_of_buildings,number_of_units,latitude,longitude,unit
+ORDINAL-1,1840 NW 33 ST,Pompano Beach,33064,Residential,1,1,26.2680,-80.1500,
+UNIT-101,4137 STIRLING RD UNIT 101,Dania Beach,33314,Condominium,1,1,26.0486,-80.2029,101
+UNIT-506,4137 STIRLING RD UNIT 506,Dania Beach,33314,Condominium,1,1,26.0487,-80.2029,506
+SITE-101,8610 N SHERMAN CIR UNIT 101,Miramar,33025,Condominium,1,1,25.9880,-80.2360,101
+SITE-102,8610 N SHERMAN CIR UNIT 102,Miramar,33025,Condominium,1,1,25.9880,-80.2360,102
+RANGE-1,3001-3161 SW 160 AVE,Miramar,33027,Commercial,1,0,25.9814,-80.3575,
+HOLLYWOOD-1,3816 HOLLYWOOD BLVD UNIT 1,Hollywood,33021,Condominium,1,1,26.0100,-80.1800,1
+HOLLYWOOD-2,3816 HOLLYWOOD BLVD UNIT 2,Hollywood,33021,Condominium,1,1,26.0100,-80.1800,2
+HOLLYWOOD-3,3816 HOLLYWOOD BLVD UNIT 3,Hollywood,33021,Condominium,1,1,26.0100,-80.1800,3
+HOLLYWOOD-4,3816 HOLLYWOOD BLVD UNIT 4,Hollywood,33021,Condominium,1,1,26.0100,-80.1800,4
+HOLLYWOOD-5,3816 HOLLYWOOD BLVD UNIT 5,Hollywood,33021,Condominium,1,1,26.0100,-80.1800,5
+HOLLYWOOD-6,3816 HOLLYWOOD BLVD UNIT 6,Hollywood,33021,Condominium,1,1,26.0100,-80.1800,6
+"""
+    payload += "".join(
+        f"DECOY-{index:03d},{1000 + index}-{1001 + index} HOLLYWOOD BLVD,Hollywood,33021,Commercial,1,0,26.0200,-80.1900,\n"
+        for index in range(500)
+    ).encode()
+    imported = client.post(
+        "/api/v1/properties/imports",
+        headers=headers,
+        files={"file": ("broward-variants.csv", payload, "text/csv")},
+        data={
+            "provider_id": "fixture.sarasota.property_appraiser",
+            "source_version": "fixture-broward-variants-v1",
+            "idempotency_key": "property-broward-variants",
+            "import_mode": "full",
+        },
+    )
+    imported.raise_for_status()
+    with main_module.SessionLocal() as db:
+        db.execute(text("UPDATE parcels SET street_name = NULL WHERE parcel_id LIKE 'HOLLYWOOD-%'"))
+        db.commit()
+
+    cases = (
+        (
+            "1840 NW 33rd St, Pompano Beach, FL 33064, USA",
+            "variant-ordinal",
+            "matched",
+            "ORDINAL-1",
+        ),
+        (
+            "4137 Stirling Rd Apt 506, Davie, FL 33314, USA",
+            "variant-unit-city",
+            "matched",
+            "UNIT-506",
+        ),
+        (
+            "3021 SW 160th Ave, Miramar, FL 33027, USA",
+            "variant-range",
+            "matched",
+            "RANGE-1",
+        ),
+    )
+    for location, key, expected_status, expected_parcel in cases:
+        incident_id = _create_incident(client, headers, location, key)
+        response = client.post(
+            f"/api/v1/incidents/{incident_id}/property-matches",
+            headers=headers,
+            json={"property_provider_id": "fixture.sarasota.property_appraiser"},
+        )
+        response.raise_for_status()
+        body = response.json()
+        assert body["status"] == expected_status
+        assert body["candidates"][0]["parcel"]["parcel_id"] == expected_parcel
+
+    site_incident_id = _create_incident(
+        client,
+        headers,
+        "8610 N Sherman Cir, Miramar, FL 33025, USA",
+        "variant-site",
+    )
+    site_response = client.post(
+        f"/api/v1/incidents/{site_incident_id}/property-matches",
+        headers=headers,
+        json={"property_provider_id": "fixture.sarasota.property_appraiser"},
+    )
+    site_response.raise_for_status()
+    site = site_response.json()
+    assert site["status"] == "site_matched"
+    assert site["candidate_count"] == 2
+    assert all(candidate["is_abstained"] for candidate in site["candidates"])
+    assert all(
+        candidate["explanation"]["owner_attribution"] == "not_available"
+        for candidate in site["candidates"]
+    )
+
+    score_response = client.post(
+        f"/api/v1/incidents/{site_incident_id}/opportunity-score",
+        headers=headers,
+        json={"property_provider_id": "fixture.sarasota.property_appraiser"},
+    )
+    score_response.raise_for_status()
+    score = score_response.json()
+    assert score["status"] == "scored"
+    assert score["provisional_score"] is not None
+    assert score["alert_eligibility"] is False
+    match_feature = next(
+        item for item in score["features"] if item["feature_name"] == "property_match_quality"
+    )
+    assert match_feature["status"] == "site_matched"
+
+    city_street_incident_id = _create_incident(
+        client,
+        headers,
+        "3816 Hollywood Blvd, Hollywood, FL 33021, USA",
+        "variant-city-street-site",
+    )
+    city_street_response = client.post(
+        f"/api/v1/incidents/{city_street_incident_id}/property-matches",
+        headers=headers,
+        json={"property_provider_id": "fixture.sarasota.property_appraiser"},
+    )
+    city_street_response.raise_for_status()
+    city_street_site = city_street_response.json()
+    assert city_street_site["status"] == "site_matched"
+    assert city_street_site["candidate_count"] == 6
+    assert all(
+        candidate["explanation"]["owner_attribution"] == "not_available"
+        for candidate in city_street_site["candidates"]
+    )

@@ -2,15 +2,66 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
+from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import AuditChainHead, AuditEvent
+
+_AUDIT_LOCK_KEY = "audit_chain_lock"
+
+
+def _acquire_sqlite_audit_lock(db: Session) -> None:
+    """Serialize a SQLite audit chain until the surrounding transaction finishes.
+
+    SQLite does not honor ``SELECT ... FOR UPDATE``.  Without an application-level lock,
+    two concurrent API requests can read the same chain head and try to insert the same
+    sequence number.  The lock is scoped to the database URL and released by the Session's
+    commit/rollback hooks below, so the chain head and event remain one ordered transaction.
+    """
+    if db.get_bind().dialect.name != "sqlite" or _AUDIT_LOCK_KEY in db.info:
+        return
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover - SQLite deployments for this app are POSIX local dev.
+        return
+    database_identity = str(db.connection().engine.url).encode("utf-8")
+    lock_name = hashlib.sha256(database_identity).hexdigest()
+    lock_path = Path(tempfile.gettempdir()) / f"beyond-fire-radar-audit-{lock_name}.lock"
+    handle = lock_path.open("a+")
+    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+    db.info[_AUDIT_LOCK_KEY] = handle
+
+
+def _release_sqlite_audit_lock(db: Session) -> None:
+    handle = db.info.pop(_AUDIT_LOCK_KEY, None)
+    if handle is None:
+        return
+    try:
+        import fcntl
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    except ImportError:  # pragma: no cover - paired with the POSIX-only acquire path.
+        pass
+    finally:
+        handle.close()
+
+
+@sqlalchemy_event.listens_for(Session, "after_commit")
+def _release_audit_lock_after_commit(db: Session) -> None:
+    _release_sqlite_audit_lock(db)
+
+
+@sqlalchemy_event.listens_for(Session, "after_rollback")
+def _release_audit_lock_after_rollback(db: Session) -> None:
+    _release_sqlite_audit_lock(db)
 
 
 def _aware(value: datetime) -> datetime:
@@ -56,6 +107,7 @@ def record_audit(
     resource_id: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> AuditEvent:
+    _acquire_sqlite_audit_lock(db)
     event_id = str(uuid4())
     event_metadata = metadata or {}
     created_at = datetime.now(timezone.utc)

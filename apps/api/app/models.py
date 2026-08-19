@@ -807,6 +807,26 @@ class Parcel(Base):
     __table_args__ = (
         UniqueConstraint("provider_id", "parcel_id", name="uq_parcel_provider_parcel_id"),
         Index("ix_parcels_address_search", "provider_id", "normalized_address"),
+        Index(
+            "ix_parcels_provider_active_normalized_address",
+            "provider_id",
+            "is_active",
+            "normalized_address",
+        ),
+        Index(
+            "ix_parcels_provider_active_address_core",
+            "provider_id",
+            "is_active",
+            "house_number",
+            "street_name",
+            "street_type",
+        ),
+        Index(
+            "ix_parcels_provider_active_master_parcel",
+            "provider_id",
+            "is_active",
+            "master_parcel_id",
+        ),
         Index("ix_parcels_street_search", "provider_id", "street_name", "house_number"),
         Index("ix_parcels_municipality_zip", "provider_id", "municipality", "postal_code"),
     )
@@ -865,6 +885,11 @@ class ParcelAddressAlias(Base):
     __table_args__ = (
         UniqueConstraint(
             "parcel_id", "normalized_address", "alias_type", name="uq_parcel_address_alias"
+        ),
+        Index(
+            "ix_parcel_address_aliases_normalized_address_parcel_id",
+            "normalized_address",
+            "parcel_id",
         ),
     )
 

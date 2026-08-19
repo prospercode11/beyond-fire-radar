@@ -6,7 +6,7 @@ import io
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from html.parser import HTMLParser
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from zoneinfo import ZoneInfo
@@ -15,6 +15,10 @@ from app.providers.taxonomy import classify_event
 
 PARSER_VERSION = "sarasota.dispatch.v1"
 SCHEMA_VERSION = "sarasota.dispatch.schema.v1"
+MIAMI_DADE_PARSER_VERSION = "miami_dade.dispatch.v1"
+MIAMI_DADE_SCHEMA_VERSION = "miami_dade.dispatch.schema.v1"
+BROWARD_PARSER_VERSION = "broward.efirstalert.v1"
+BROWARD_SCHEMA_VERSION = "broward.efirstalert.schema.v1"
 SUPPORTED_FORMATS = {"csv", "html", "json"}
 EXPECTED_FIELDS = [
     "date",
@@ -118,9 +122,18 @@ def _canonical_header(field_name: str) -> Optional[str]:
     key = _header_key(field_name)
     if key in {"date", "event_date", "incident_date", "_group_date"}:
         return "date"
-    if key in {"time", "event_time", "event_datetime", "datetime", "timestamp", "incident_time"}:
+    if key in {
+        "time",
+        "event_time",
+        "event_datetime",
+        "datetime",
+        "timestamp",
+        "incident_time",
+        "rcvd",
+        "original_call_time",
+    }:
         return "time"
-    if key in {"event", "event_type", "incident_type", "call_type", "nature"}:
+    if key in {"event", "event_type", "incident_type", "inc_type", "call_type", "nature"}:
         return "event_type"
     if key.startswith("event_") and key.split("_")[-1].isdigit():
         return "source_event_id"
@@ -136,8 +149,10 @@ def _canonical_header(field_name: str) -> Optional[str]:
         return "location_precision"
     if key in {"grid", "dispatch_grid"}:
         return "grid"
-    if key in {"zone", "station", "responding_station", "agency_station"}:
+    if key in {"zone", "station", "responding_station", "agency_station", "jurisdiction"}:
         return "zone"
+    if key in {"units", "units_dispatched"}:
+        return "units"
     if key in {"case", "case_number", "case_num", "agency_case_number", "source_case_number"}:
         return "source_case_number"
     if key == "event_2":
@@ -175,7 +190,7 @@ def _parse_event_time(raw: Dict[str, Any]) -> Optional[datetime]:
     event_date = _parse_date(
         _clean(raw.get("date") or raw.get("event_date") or raw.get("_group_date"))
     )
-    event_time = _clean(raw.get("time") or raw.get("event_time"))
+    event_time = _clean(raw.get("time") or raw.get("event_time") or raw.get("rcvd"))
     if event_date is None or not event_time:
         return None
     for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p"):
@@ -219,10 +234,13 @@ def _value(raw: Dict[str, Any], aliases: Sequence[str]) -> str:
 
 
 def _canonicalize(raw: Dict[str, Any], row_number: int) -> ParsedDispatchRow:
-    original_event = _value(raw, ("event_type", "event", "incident_type", "call_type"))
+    original_event = _value(raw, ("event_type", "event", "incident_type", "inc_type", "call_type"))
     location = _value(raw, ("location", "address", "incident_location"))
     if not original_event:
-        raise DispatchParseError("missing_event_type", "row has no event type")
+        if raw.get("_broward_source"):
+            original_event = "(source call type blank)"
+        else:
+            raise DispatchParseError("missing_event_type", "row has no event type")
     if not location:
         raise DispatchParseError("missing_location", "row has no location")
 
@@ -232,20 +250,38 @@ def _canonicalize(raw: Dict[str, Any], row_number: int) -> ParsedDispatchRow:
     source_case_number = (
         _value(raw, ("source_case_number", "case", "case_number", "case_num")) or None
     )
+    if raw.get("_broward_source") and not source_event_id:
+        broward_key = "|".join(
+            _clean(value).upper()
+            for value in (
+                raw.get("date"),
+                raw.get("time"),
+                original_event,
+                raw.get("jurisdiction"),
+                location,
+                raw.get("latitude"),
+                raw.get("longitude"),
+            )
+        )
+        source_event_id = "broward-" + hashlib.sha256(broward_key.encode("utf-8")).hexdigest()[:24]
     stable_key = "|".join(
         value or ""
         for value in (
             source_case_number,
             source_event_id,
-            _clean(raw.get("date")),
+            _clean(raw.get("date") or raw.get("_group_date")),
             _clean(raw.get("time")),
             location,
             original_event,
+            _clean(raw.get("fc")),
+            _clean(raw.get("units")),
         )
     )
     source_record_id = hashlib.sha256(stable_key.encode("utf-8")).hexdigest()[:32]
     event_time = _parse_event_time(raw)
-    agency, station = _zone_parts(_value(raw, ("zone", "station", "responding_station")))
+    agency, station = _zone_parts(
+        _value(raw, ("zone", "station", "responding_station", "jurisdiction"))
+    )
     normalized_event = classify_event(original_event)
     confidence = 1.0 if event_time is not None else 0.7
     latitude = _coordinate(raw.get("latitude") or raw.get("lat"), minimum=-90.0, maximum=90.0)
@@ -261,25 +297,41 @@ def _canonicalize(raw: Dict[str, Any], row_number: int) -> ParsedDispatchRow:
         original_event_type=original_event,
         normalized_event_family=normalized_event,
         original_location=location,
-        location_precision=_value(raw, ("location_precision", "address_precision")) or None,
+        location_precision=(
+            _value(raw, ("location_precision", "address_precision"))
+            or (
+                "approximate_public_call_location"
+                if raw.get("_miami_dade_source")
+                else "source_display_address"
+                if raw.get("_broward_source")
+                else None
+            )
+        ),
         latitude=latitude,
         longitude=longitude,
         grid=_value(raw, ("grid", "dispatch_grid")) or None,
         agency=agency,
         station=station,
         raw_payload=raw,
-        parser_confidence=confidence,
+        parser_confidence=0.85 if raw.get("_broward_source") else confidence,
     )
 
 
-def _schema(fields: Sequence[str]) -> SchemaAssessment:
+def _schema(
+    fields: Sequence[str], *, known_optional_fields: Optional[set[str]] = None
+) -> SchemaAssessment:
+    known_optional_fields = known_optional_fields or set()
     canonical_fields = sorted({mapped for field in fields if (mapped := _canonical_header(field))})
     missing = sorted(set(REQUIRED_FIELDS) - set(canonical_fields))
     unexpected = sorted(
         {
             _header_key(field)
             for field in fields
-            if _canonical_header(field) is None and _header_key(field) != "unnamed"
+            if (
+                _canonical_header(field) is None
+                and _header_key(field) != "unnamed"
+                and _header_key(field) not in known_optional_fields
+            )
         }
     )
     if missing:
@@ -367,6 +419,107 @@ class _SarasotaTableHTMLParser(HTMLParser):
             self.current_cell.append(data)
 
 
+class _MiamiDadeTableHTMLParser(HTMLParser):
+    """Read the regional tables from the MDFR active-call page.
+
+    The page repeats the same five-column header in several tables and uses
+    nested spans for unit identifiers. This parser intentionally retains the
+    source cells as text and does not infer a street address or an event ID.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.in_table = False
+        self.in_row = False
+        self.current_cell: Optional[List[str]] = None
+        self.current_row: List[str] = []
+        self.tables: List[List[List[str]]] = []
+        self.table_rows: List[List[str]] = []
+
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+        if tag == "table" and not self.in_table:
+            self.in_table = True
+            self.table_rows = []
+        elif self.in_table and tag == "tr":
+            self.in_row = True
+            self.current_row = []
+        elif self.in_row and tag in {"th", "td"}:
+            self.current_cell = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if not self.in_table:
+            return
+        if tag in {"th", "td"} and self.current_cell is not None:
+            self.current_row.append(_clean(" ".join(self.current_cell)))
+            self.current_cell = None
+        elif tag == "tr" and self.in_row:
+            if self.current_row:
+                self.table_rows.append(self.current_row)
+            self.current_row = []
+            self.in_row = False
+        elif tag == "table":
+            if self.table_rows:
+                self.tables.append(self.table_rows)
+            self.table_rows = []
+            self.in_table = False
+
+    def handle_data(self, data: str) -> None:
+        if self.current_cell is not None:
+            self.current_cell.append(data)
+
+
+class _BrowardTableHTMLParser(HTMLParser):
+    """Parse eFirstAlert's public Broward table without inferring call type."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.in_table = False
+        self.in_head = False
+        self.current_row: Optional[List[str]] = None
+        self.current_cell: Optional[List[str]] = None
+        self.current_links: List[str] = []
+        self.headers: List[str] = []
+        self.rows: List[Tuple[List[str], List[str]]] = []
+
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+        attr_map = {key: value or "" for key, value in attrs}
+        if tag == "table" and not self.in_table:
+            self.in_table = True
+        if not self.in_table:
+            return
+        if tag == "thead":
+            self.in_head = True
+        elif tag == "tr":
+            self.current_row = []
+            self.current_links = []
+        elif tag in {"th", "td"} and self.current_row is not None:
+            self.current_cell = []
+        elif tag == "a" and self.current_cell is not None and attr_map.get("href"):
+            self.current_links.append(attr_map["href"])
+
+    def handle_endtag(self, tag: str) -> None:
+        if not self.in_table:
+            return
+        if tag in {"th", "td"} and self.current_cell is not None and self.current_row is not None:
+            self.current_row.append(_clean(" ".join(self.current_cell)))
+            self.current_cell = None
+        elif tag == "tr" and self.current_row is not None:
+            if self.in_head:
+                self.headers = _unique_headers(self.current_row)
+            elif self.current_row:
+                self.rows.append((self.current_row, self.current_links))
+            self.current_row = None
+            self.current_links = []
+        elif tag == "thead":
+            self.in_head = False
+        elif tag == "table":
+            self.in_table = False
+
+    def handle_data(self, data: str) -> None:
+        if self.current_cell is not None:
+            self.current_cell.append(data)
+
+
 def _html_rows(payload: bytes) -> Tuple[List[str], List[Dict[str, Any]]]:
     parser = _SarasotaTableHTMLParser()
     parser.feed(payload.decode("utf-8-sig", errors="replace"))
@@ -382,6 +535,91 @@ def _html_rows(payload: bytes) -> Tuple[List[str], List[Dict[str, Any]]]:
         raw = dict(zip(parser.headers, padded[: len(parser.headers)]))
         if group_date:
             raw["_group_date"] = group_date
+        rows.append(raw)
+    return parser.headers, rows
+
+
+def _miami_dade_html_rows(payload: bytes) -> Tuple[List[str], List[Dict[str, Any]]]:
+    parser = _MiamiDadeTableHTMLParser()
+    text = payload.decode("utf-8-sig", errors="replace")
+    parser.feed(text)
+    retrieved_date_match = re.search(r"as of[\s\S]{0,120}?(\d{4}-\d{2}-\d{2})", text, re.IGNORECASE)
+    retrieved_date = retrieved_date_match.group(1) if retrieved_date_match else None
+    expected = {"rcvd", "fc", "inc_type", "address", "units"}
+    rows: List[Dict[str, Any]] = []
+    common_headers: List[str] = []
+    for table in parser.tables:
+        if not table:
+            continue
+        headers = _unique_headers(table[0])
+        if not expected.issubset(set(headers)):
+            continue
+        if not common_headers:
+            common_headers = headers
+        for values in table[1:]:
+            padded = list(values) + [""] * max(0, len(headers) - len(values))
+            raw: Dict[str, Any] = dict(zip(headers, padded[: len(headers)]))
+            if retrieved_date:
+                raw["_group_date"] = retrieved_date
+            raw["_miami_dade_source"] = True
+            rows.append(raw)
+    if not common_headers:
+        raise DispatchParseError(
+            "dispatch_table_missing",
+            "Miami-Dade HTML did not contain an MDFR active-call table with the expected headers",
+        )
+    return common_headers, rows
+
+
+def _broward_html_rows(
+    payload: bytes, retrieved_at: Optional[datetime] = None
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    parser = _BrowardTableHTMLParser()
+    parser.feed(payload.decode("utf-8-sig", errors="replace"))
+    required = {
+        "last_update",
+        "original_call_time",
+        "call_type",
+        "jurisdiction",
+        "address",
+        "units_dispatched",
+        "map_link",
+    }
+    if not required.issubset(set(parser.headers)):
+        raise DispatchParseError(
+            "dispatch_table_missing",
+            "Broward page did not contain the expected eFirstAlert dispatch table",
+        )
+    effective_retrieved_at = retrieved_at or datetime.now(timezone.utc)
+    if effective_retrieved_at.tzinfo is None:
+        effective_retrieved_at = effective_retrieved_at.replace(tzinfo=timezone.utc)
+    now = effective_retrieved_at.astimezone(LOCAL_TIMEZONE)
+    rows: List[Dict[str, Any]] = []
+    for values, links in parser.rows:
+        padded = list(values) + [""] * max(0, len(parser.headers) - len(values))
+        raw: Dict[str, Any] = dict(zip(parser.headers, padded[: len(parser.headers)]))
+        raw["time"] = raw.get("original_call_time", "")
+        raw["event_type"] = raw.get("call_type", "")
+        raw["location"] = raw.get("address", "")
+        raw["units"] = raw.get("units_dispatched", "")
+        raw["_broward_source"] = True
+        raw["_broward_date_inferred_from_retrieval"] = True
+        call_time = _clean(raw["time"])
+        event_date = now.date()
+        try:
+            local_time = datetime.strptime(call_time, "%H:%M:%S").time()
+            if datetime.combine(event_date, local_time, tzinfo=LOCAL_TIMEZONE) - now > timedelta(
+                hours=6
+            ):
+                event_date -= timedelta(days=1)
+        except ValueError:
+            pass
+        raw["date"] = event_date.isoformat()
+        map_link = next((link for link in links if "google.com/maps" in link), "")
+        raw["map_link"] = map_link
+        match = re.search(r"(?:[?&]query=)\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)", map_link)
+        if match:
+            raw["latitude"], raw["longitude"] = match.group(1), match.group(2)
         rows.append(raw)
     return parser.headers, rows
 
@@ -421,15 +659,29 @@ def parse_snapshot(
     content_type: Optional[str],
     filename: str,
     parser_version: str = PARSER_VERSION,
+    retrieved_at: Optional[datetime] = None,
 ) -> ParseResult:
-    if parser_version != PARSER_VERSION:
+    if parser_version not in {PARSER_VERSION, MIAMI_DADE_PARSER_VERSION, BROWARD_PARSER_VERSION}:
         raise DispatchParseError(
             "unsupported_parser_version", f"parser version {parser_version} is not registered"
         )
+    schema_version = (
+        MIAMI_DADE_SCHEMA_VERSION
+        if parser_version == MIAMI_DADE_PARSER_VERSION
+        else BROWARD_SCHEMA_VERSION
+        if parser_version == BROWARD_PARSER_VERSION
+        else SCHEMA_VERSION
+    )
     lower_name = filename.lower()
     if lower_name.endswith((".html", ".htm")) or "html" in (content_type or "").lower():
         format_name = "html"
-        row_loader = _html_rows
+        if parser_version == MIAMI_DADE_PARSER_VERSION:
+            row_loader = _miami_dade_html_rows
+        elif parser_version == BROWARD_PARSER_VERSION:
+            headers, raw_rows = _broward_html_rows(payload, retrieved_at)
+            row_loader = None
+        else:
+            row_loader = _html_rows
     elif lower_name.endswith(".json") or "json" in (content_type or "").lower():
         format_name = "json"
         row_loader = _json_rows
@@ -440,18 +692,26 @@ def parse_snapshot(
         return ParseResult(
             format="unknown",
             parser_version=parser_version,
-            schema_version=SCHEMA_VERSION,
+            schema_version=schema_version,
             issues=[
                 ParseIssue("unsupported_format", "only CSV, HTML, and JSON snapshots are supported")
             ],
         )
 
-    headers, raw_rows = row_loader(payload)
-    assessment = _schema(headers)
+    if row_loader is not None:
+        headers, raw_rows = row_loader(payload)
+    assessment = _schema(
+        headers,
+        known_optional_fields={"fc", "units"}
+        if parser_version == MIAMI_DADE_PARSER_VERSION
+        else {"last_update", "jurisdiction", "units_dispatched", "map_link"}
+        if parser_version == BROWARD_PARSER_VERSION
+        else None,
+    )
     result = ParseResult(
         format=format_name,
         parser_version=parser_version,
-        schema_version=SCHEMA_VERSION,
+        schema_version=schema_version,
         schema=assessment,
     )
     if assessment.missing_required_fields:

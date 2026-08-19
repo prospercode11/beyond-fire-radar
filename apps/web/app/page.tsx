@@ -1,9 +1,44 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
+import { DesktopUpdater } from "./desktop-updater";
 
-type View = "command" | "stream" | "opportunities" | "workflow" | "analytics" | "learning" | "health" | "settings";
-type IconName = "grid" | "pulse" | "spark" | "shield" | "sliders" | "search" | "bell" | "arrow" | "refresh" | "lock" | "chevron" | "database" | "clock" | "filter" | "upload" | "logout" | "check" | "warning";
+type View =
+  | "command"
+  | "stream"
+  | "opportunities"
+  | "workflow"
+  | "analytics"
+  | "learning"
+  | "health"
+  | "settings";
+type IconName =
+  | "grid"
+  | "pulse"
+  | "spark"
+  | "shield"
+  | "sliders"
+  | "search"
+  | "bell"
+  | "arrow"
+  | "refresh"
+  | "lock"
+  | "chevron"
+  | "database"
+  | "clock"
+  | "filter"
+  | "upload"
+  | "logout"
+  | "check"
+  | "warning";
 type JsonMap = Record<string, unknown>;
 
 type Provider = {
@@ -29,6 +64,9 @@ type ProviderHealth = {
   circuit_state: string;
   schema_drift_detected: boolean;
   schema_alert_count: number;
+  pending_processing_retrieval_count: number;
+  pending_processing_observation_count: number;
+  oldest_pending_processing_retrieval: string | null;
   known_status_note: string;
 };
 
@@ -110,12 +148,15 @@ type IncidentDetail = IncidentSummary & {
   source_acquisition_modes: string[];
   source_retrieval_ids: string[];
   observations: Observation[];
+  evidence_groups: EvidenceGroup[];
   source_row_ids: string[];
   relationship_history: JsonMap[];
   timeline: JsonMap[];
   evidence: JsonMap[];
   match_decisions: JsonMap[];
   aliases: JsonMap[];
+  score_eligible: boolean;
+  score_eligibility_reason: string | null;
 };
 
 type Observation = {
@@ -139,6 +180,17 @@ type Observation = {
   parser_version: string;
   taxonomy_version: string;
   raw_payload_reference: string;
+};
+
+type EvidenceGroup = {
+  id: string;
+  representative: Observation;
+  retained_observation_count: number;
+  source_record_ids: string[];
+  source_capture_count: number;
+  first_retrieved_at: string;
+  last_retrieved_at: string;
+  grouping_version: string;
 };
 
 type Parcel = {
@@ -350,109 +402,486 @@ type LearningModel = {
   created_at: string;
 };
 
-const navigation: { id: View; label: string; detail: string; icon: IconName }[] = [
-  { id: "command", label: "Command center", detail: "Overview", icon: "grid" },
-  { id: "stream", label: "Incident stream", detail: "Sarasota", icon: "pulse" },
-  { id: "opportunities", label: "Opportunities", detail: "Review queue", icon: "spark" },
-  { id: "workflow", label: "Workflow", detail: "Internal alerts", icon: "bell" },
-  { id: "analytics", label: "Outcomes", detail: "Analytics", icon: "database" },
-  { id: "learning", label: "Model lab", detail: "Governed learning", icon: "database" },
-  { id: "health", label: "Data health", detail: "Source posture", icon: "shield" },
-  { id: "settings", label: "Settings", detail: "Governance", icon: "sliders" },
+type NavigationItem = {
+  id: View;
+  label: string;
+  detail: string;
+  icon: IconName;
+  group: "Review" | "Intelligence" | "System";
+};
+
+const navigation: NavigationItem[] = [
+  {
+    id: "command",
+    label: "Review desk",
+    detail: "Priority work",
+    icon: "grid",
+    group: "Review",
+  },
+  {
+    id: "stream",
+    label: "Incidents",
+    detail: "Evidence queue",
+    icon: "pulse",
+    group: "Review",
+  },
+  {
+    id: "opportunities",
+    label: "Opportunities",
+    detail: "Review queue",
+    icon: "spark",
+    group: "Review",
+  },
+  {
+    id: "workflow",
+    label: "Workflow",
+    detail: "Internal alerts",
+    icon: "bell",
+    group: "Review",
+  },
+  {
+    id: "analytics",
+    label: "Outcomes",
+    detail: "Directional analytics",
+    icon: "database",
+    group: "Intelligence",
+  },
+  {
+    id: "health",
+    label: "Sources & health",
+    detail: "Imports and posture",
+    icon: "shield",
+    group: "System",
+  },
+  {
+    id: "learning",
+    label: "Model lab",
+    detail: "Governed learning",
+    icon: "database",
+    group: "System",
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    detail: "Governance",
+    icon: "sliders",
+    group: "System",
+  },
 ];
+
+const incidentTransitions: Record<string, string[]> = {
+  new: [
+    "awaiting_review",
+    "property_unresolved",
+    "likely_structure",
+    "high_structure",
+    "closed",
+    "suppressed",
+  ],
+  awaiting_review: [
+    "property_unresolved",
+    "likely_structure",
+    "high_structure",
+    "confirmed",
+    "Disposition pending",
+    "downgraded",
+    "false_alarm",
+    "closed",
+    "suppressed",
+  ],
+  property_unresolved: [
+    "awaiting_review",
+    "likely_structure",
+    "high_structure",
+    "confirmed",
+    "Disposition pending",
+    "downgraded",
+    "false_alarm",
+    "closed",
+    "suppressed",
+  ],
+  likely_structure: [
+    "awaiting_review",
+    "high_structure",
+    "confirmed",
+    "Disposition pending",
+    "downgraded",
+    "false_alarm",
+    "closed",
+    "suppressed",
+  ],
+  high_structure: [
+    "awaiting_review",
+    "likely_structure",
+    "confirmed",
+    "Disposition pending",
+    "downgraded",
+    "false_alarm",
+    "closed",
+    "suppressed",
+  ],
+  confirmed: ["awaiting_review", "downgraded", "closed", "suppressed"],
+  "Disposition pending": [
+    "confirmed",
+    "downgraded",
+    "false_alarm",
+    "closed",
+    "suppressed",
+  ],
+  downgraded: ["closed", "suppressed"],
+  false_alarm: ["closed", "suppressed"],
+  closed: ["suppressed"],
+  suppressed: [],
+};
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api-backend";
 
 function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, ReactNode> = {
-    grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
-    pulse: <><path d="M3 12h4l2.2-6 4.3 12 2.2-6H21" /></>,
-    spark: <><path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Z" /><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z" /></>,
-    shield: <><path d="M12 3 20 6v5c0 5-3.4 8.1-8 10-4.6-1.9-8-5-8-10V6l8-3Z" /><path d="m8.5 12 2.2 2.2 4.8-5" /></>,
-    sliders: <><path d="M4 6h7M15 6h5M4 12h3M11 12h9M4 18h9M17 18h3" /><circle cx="13" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="15" cy="18" r="2" /></>,
-    search: <><circle cx="10.8" cy="10.8" r="6.5" /><path d="m16 16 5 5" /></>,
-    bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" /></>,
-    arrow: <><path d="M5 12h13" /><path d="m13 6 6 6-6 6" /></>,
-    refresh: <><path d="M20 11a8 8 0 0 0-14.7-3L3 11" /><path d="M3 5v6h6" /><path d="M4 13a8 8 0 0 0 14.7 3L21 13" /><path d="M21 19v-6h-6" /></>,
-    lock: <><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
+    grid: (
+      <>
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="14" y="14" width="7" height="7" rx="1" />
+      </>
+    ),
+    pulse: (
+      <>
+        <path d="M3 12h4l2.2-6 4.3 12 2.2-6H21" />
+      </>
+    ),
+    spark: (
+      <>
+        <path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Z" />
+        <path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z" />
+      </>
+    ),
+    shield: (
+      <>
+        <path d="M12 3 20 6v5c0 5-3.4 8.1-8 10-4.6-1.9-8-5-8-10V6l8-3Z" />
+        <path d="m8.5 12 2.2 2.2 4.8-5" />
+      </>
+    ),
+    sliders: (
+      <>
+        <path d="M4 6h7M15 6h5M4 12h3M11 12h9M4 18h9M17 18h3" />
+        <circle cx="13" cy="6" r="2" />
+        <circle cx="9" cy="12" r="2" />
+        <circle cx="15" cy="18" r="2" />
+      </>
+    ),
+    search: (
+      <>
+        <circle cx="10.8" cy="10.8" r="6.5" />
+        <path d="m16 16 5 5" />
+      </>
+    ),
+    bell: (
+      <>
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" />
+      </>
+    ),
+    arrow: (
+      <>
+        <path d="M5 12h13" />
+        <path d="m13 6 6 6-6 6" />
+      </>
+    ),
+    refresh: (
+      <>
+        <path d="M20 11a8 8 0 0 0-14.7-3L3 11" />
+        <path d="M3 5v6h6" />
+        <path d="M4 13a8 8 0 0 0 14.7 3L21 13" />
+        <path d="M21 19v-6h-6" />
+      </>
+    ),
+    lock: (
+      <>
+        <rect x="5" y="10" width="14" height="11" rx="2" />
+        <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+      </>
+    ),
     chevron: <path d="m8 10 4 4 4-4" />,
-    database: <><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /><path d="M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7" /></>,
-    clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></>,
+    database: (
+      <>
+        <ellipse cx="12" cy="5" rx="8" ry="3" />
+        <path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
+        <path d="M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7" />
+      </>
+    ),
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 7v5l3.5 2" />
+      </>
+    ),
     filter: <path d="M4 6h16M7 12h10M10 18h4" />,
-    upload: <><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 20h14" /></>,
-    logout: <><path d="M10 5H5v14h5" /><path d="m14 8 4 4-4 4" /><path d="M18 12H9" /></>,
+    upload: (
+      <>
+        <path d="M12 16V4" />
+        <path d="m7 9 5-5 5 5" />
+        <path d="M5 20h14" />
+      </>
+    ),
+    logout: (
+      <>
+        <path d="M10 5H5v14h5" />
+        <path d="m14 8 4 4-4 4" />
+        <path d="M18 12H9" />
+      </>
+    ),
     check: <path d="m5 12 4 4L19 6" />,
-    warning: <><path d="M12 3 2.5 20h19L12 3Z" /><path d="M12 9v5M12 17h.01" /></>,
+    warning: (
+      <>
+        <path d="M12 3 2.5 20h19L12 3Z" />
+        <path d="M12 9v5M12 17h.01" />
+      </>
+    ),
   };
-  return <svg aria-hidden="true" className="icon" height={size} viewBox="0 0 24 24" width={size} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7">{paths[name]}</svg>;
+  return (
+    <svg
+      aria-hidden="true"
+      className="icon"
+      height={size}
+      viewBox="0 0 24 24"
+      width={size}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.7"
+    >
+      {paths[name]}
+    </svg>
+  );
 }
 
 function formatDate(value: string | null | undefined, withTime = false) {
   if (!value) return "Unknown";
-  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : `${value}Z`;
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)
+    ? value
+    : `${value}Z`;
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", withTime ? { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" } : { month: "short", day: "numeric", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat(
+    "en-US",
+    withTime
+      ? { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }
+      : { month: "short", day: "numeric", year: "numeric" },
+  ).format(date);
 }
 
 function label(value: string | null | undefined) {
-  return (value ?? "unknown").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return (value ?? "unknown")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function jurisdictionLabel(providers: Provider[]) {
+  const coverages = [
+    ...new Set(
+      providers
+        .filter(
+          (provider) =>
+            provider.data_type === "dispatch_snapshot" &&
+            !provider.id.startsWith("fixture."),
+        )
+        .map((provider) =>
+          provider.geographic_coverage.replace(/, Florida$/i, ""),
+        ),
+    ),
+  ];
+  return coverages.length === 1
+    ? coverages[0]
+    : coverages.length > 1
+      ? "Multi-county"
+      : "Multi-jurisdiction";
+}
+
+function propertyProviderForDispatch(dispatchProviderId: string | undefined) {
+  if (dispatchProviderId === "miami_dade.fire_calls")
+    return "miami_dade.property_appraiser";
+  if (dispatchProviderId === "broward.efirstalert_dispatch")
+    return "broward.property_tax_roll";
+  if (dispatchProviderId === "sarasota.official_dispatch")
+    return "sarasota.property_appraiser";
+  return undefined;
+}
+
+function providerShortLabel(providerId: string | undefined) {
+  if (!providerId) return "Unknown source";
+  if (providerId.includes("sarasota")) return "Sarasota";
+  if (providerId.includes("miami_dade")) return "Miami-Dade";
+  if (providerId.includes("broward")) return "Broward";
+  if (providerId.startsWith("fixture.")) return "Test fixture";
+  return label(providerId);
 }
 
 function EmptyState({ title, body }: { title: string; body: string }) {
-  return <div className="empty-state"><div className="empty-mark"><Icon name="database" size={20} /></div><h3>{title}</h3><p>{body}</p></div>;
+  return (
+    <div className="empty-state">
+      <div className="empty-mark">
+        <Icon name="database" size={20} />
+      </div>
+      <h3>{title}</h3>
+      <p>{body}</p>
+    </div>
+  );
 }
 
 function sourceModeLabel(modes: string[]) {
   const unique = [...new Set(modes)];
   const hasLive = unique.includes("live_poll");
   const hasOther = unique.some((mode) => mode !== "live_poll");
-  if (hasLive && hasOther) return "Sarasota · mixed live/manual";
-  if (hasLive) return "Sarasota · live-collected";
-  if (unique.includes("synthetic_fixture") && unique.includes("manual_snapshot")) return "Sarasota · mixed manual/test";
-  if (unique.includes("synthetic_fixture")) return "Sarasota · test fixture";
-  if (unique.includes("manual_snapshot")) return "Sarasota · manual snapshot";
-  return "Sarasota · source mode unknown";
+  if (hasLive && hasOther) return "Multi-county · mixed live/manual";
+  if (hasLive) return "Multi-county · live-collected";
+  if (
+    unique.includes("synthetic_fixture") &&
+    unique.includes("manual_snapshot")
+  )
+    return "Multi-county · mixed manual/test";
+  if (unique.includes("synthetic_fixture"))
+    return "Multi-county · test fixture";
+  if (unique.includes("manual_snapshot"))
+    return "Multi-county · manual snapshot";
+  return "Multi-county · source mode unknown";
 }
 
 function livePollingStatus(systemHealth: SystemHealth | null) {
   if (!systemHealth?.live_polling_enabled) {
-    return { label: "Disabled", banner: "Live Sarasota polling is disabled. Manual snapshots remain available.", active: false };
+    return {
+      label: "Disabled",
+      banner:
+        "Live source polling is disabled. Manual snapshots remain available.",
+      active: false,
+    };
   }
   if (!systemHealth.live_polling_worker_enabled) {
-    return { label: "Enabled · worker off", banner: "Live Sarasota polling is enabled, but the scheduler worker is not running.", active: false };
+    return {
+      label: "Enabled · worker off",
+      banner:
+        "Live source polling is enabled, but the scheduler worker is not running.",
+      active: false,
+    };
   }
   const minutes = Math.round(systemHealth.live_polling_interval_seconds / 60);
-  return { label: `Enabled · every ${minutes} minutes`, banner: `Live Sarasota polling is enabled and checks Sarasota every ${minutes} minutes.`, active: true };
+  return {
+    label: `Enabled · every ${minutes} minutes`,
+    banner: `Live source polling is enabled and checks the configured source every ${minutes} minutes.`,
+    active: true,
+  };
 }
 
-function SourcePill({ compact = false, modes = [] }: { compact?: boolean; modes?: string[] }) {
-  const text = modes.length ? sourceModeLabel(modes) : "Sarasota · manual/test source";
-  return <span className={`source-pill${compact ? " compact" : ""}`}><span className="source-dot" />{text}</span>;
+function SourcePill({
+  compact = false,
+  modes = [],
+}: {
+  compact?: boolean;
+  modes?: string[];
+}) {
+  const text = modes.length
+    ? sourceModeLabel(modes)
+    : "Multi-county · manual/test source";
+  return (
+    <span className={`source-pill${compact ? " compact" : ""}`}>
+      <span className="source-dot" />
+      {text}
+    </span>
+  );
 }
 
-function Metric({ label: title, value, note, tone = "neutral" }: { label: string; value: string; note: string; tone?: "neutral" | "green" | "amber" }) {
-  return <article className="metric-card"><p className="metric-label">{title}</p><p className={`metric-value ${tone}`}>{value}</p><p className="metric-note">{note}</p></article>;
+function Metric({
+  label: title,
+  value,
+  note,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  note: string;
+  tone?: "neutral" | "green" | "amber";
+}) {
+  return (
+    <article className="metric-card">
+      <p className="metric-label">{title}</p>
+      <p className={`metric-value ${tone}`}>{value}</p>
+      <p className="metric-note">{note}</p>
+    </article>
+  );
 }
 
-async function apiRequest<T>(path: string, token: string | null, init: RequestInit = {}) {
+async function apiRequest<T>(
+  path: string,
+  token: string | null,
+  init: RequestInit = {},
+) {
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  if (init.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
-  let response: Response;
-  try { response = await fetch(`${apiBase}${path}`, { ...init, headers, cache: "no-store" }); }
-  catch (caught) { throw new Error(`${path}: ${caught instanceof Error ? caught.message : "network request failed"}`); }
-  const text = await response.text();
+  if (init.body && !(init.body instanceof FormData))
+    headers.set("Content-Type", "application/json");
+  const method = (init.method ?? "GET").toUpperCase();
+  const retryable =
+    method === "GET" || method === "HEAD" || path === "/api/v1/auth/login";
+  const attempts = retryable ? 3 : 1;
+  let response: Response | null = null;
+  let text = "";
+  let lastNetworkError: unknown = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      response = await fetch(`${apiBase}${path}`, {
+        ...init,
+        headers,
+        cache: "no-store",
+      });
+      text = await response.text();
+    } catch (caught) {
+      lastNetworkError = caught;
+      if (attempt === attempts - 1)
+        throw new Error(
+          `${path}: ${caught instanceof Error ? caught.message : "network request failed"}`,
+        );
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, 250 * (attempt + 1)),
+      );
+      continue;
+    }
+    if (
+      response.ok ||
+      !retryable ||
+      (response.status < 500 && response.status !== 429) ||
+      attempt === attempts - 1
+    )
+      break;
+    await new Promise((resolve) =>
+      window.setTimeout(resolve, 250 * (attempt + 1)),
+    );
+  }
+  if (!response)
+    throw new Error(
+      `${path}: ${lastNetworkError instanceof Error ? lastNetworkError.message : "network request failed"}`,
+    );
   let body: unknown = null;
-  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
   if (!response.ok) {
-    const detail = typeof body === "object" && body !== null && "detail" in body ? String((body as { detail: unknown }).detail) : `Request failed (${response.status})`;
-    throw new Error(detail);
+    const detail =
+      typeof body === "object" && body !== null && "detail" in body
+        ? String((body as { detail: unknown }).detail)
+        : `Request failed (${response.status})`;
+    throw new Error(`${path}: ${detail}`);
   }
   return body as T;
 }
 
-function AuthScreen({ onAuthenticated }: { onAuthenticated: (token: string) => void }) {
+function AuthScreen({
+  onAuthenticated,
+}: {
+  onAuthenticated: (token: string) => void;
+}) {
   const [mode, setMode] = useState<"login" | "bootstrap">("login");
   const [email, setEmail] = useState("admin@example.com");
   const [password, setPassword] = useState("");
@@ -460,53 +889,181 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (token: string) => v
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { apiRequest<{ available: boolean }>("/api/v1/auth/bootstrap/status", null).then((result) => setBootstrapAvailable(result.available)).catch(() => undefined); }, []);
+  useEffect(() => {
+    apiRequest<{ available: boolean }>("/api/v1/auth/bootstrap/status", null)
+      .then((result) => setBootstrapAvailable(result.available))
+      .catch(() => undefined);
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setBusy(true); setError(null);
+    setBusy(true);
+    setError(null);
     try {
-      const result = await apiRequest<{ access_token: string }>(mode === "bootstrap" ? "/api/v1/auth/bootstrap" : "/api/v1/auth/login", null, { method: "POST", body: JSON.stringify({ email, password }) });
+      const result = await apiRequest<{ access_token: string }>(
+        mode === "bootstrap" ? "/api/v1/auth/bootstrap" : "/api/v1/auth/login",
+        null,
+        { method: "POST", body: JSON.stringify({ email, password }) },
+      );
       sessionStorage.setItem("beyond-fire-radar-token", result.access_token);
       onAuthenticated(result.access_token);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Authentication failed"); }
-    finally { setBusy(false); }
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Authentication failed",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
-  return <main className="auth-screen"><section className="auth-card"><div className="auth-brand"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div><div><p className="brand-name">Beyond</p><p className="brand-product">Fire Radar</p></div></div><p className="eyebrow">INTERNAL RESEARCH ENVIRONMENT</p><h1>Evidence before escalation.</h1><p className="auth-lede">Sign in to inspect authorized Sarasota records, preserve source context, and make human review decisions.</p><form onSubmit={submit}><label>Email<input autoComplete="username" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label><label>Password<input autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={12} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} /></label>{error ? <div className="form-error" role="alert"><Icon name="warning" size={16} />{error}</div> : null}<button className="button button-dark auth-submit" disabled={busy} type="submit">{busy ? "Working…" : mode === "login" ? "Sign in" : "Create development administrator"}<Icon name="arrow" size={15} /></button></form>{bootstrapAvailable ? <button className="auth-mode" onClick={() => setMode(mode === "login" ? "bootstrap" : "login")} type="button">{mode === "login" ? "First run? Create the configured development administrator" : "Back to sign in"}</button> : null}<p className="auth-boundary"><Icon name="lock" size={14} />The API enforces authentication and role permissions. Live collection remains approval-gated; consumer outreach is disabled.</p></section></main>;
+  return (
+    <main className="auth-screen">
+      <section className="auth-card">
+        <div className="auth-brand">
+          <div className="brand-mark" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div>
+            <p className="brand-name">Beyond</p>
+            <p className="brand-product">Fire Radar</p>
+          </div>
+        </div>
+        <p className="eyebrow">INTERNAL RESEARCH ENVIRONMENT</p>
+        <h1>Evidence before escalation.</h1>
+        <p className="auth-lede">
+          Sign in to inspect authorized county records, preserve source context,
+          and make human review decisions.
+        </p>
+        <form onSubmit={submit}>
+          <label>
+            Email
+            <input
+              autoComplete="username"
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              type="email"
+              value={email}
+            />
+          </label>
+          <label>
+            Password
+            <input
+              autoComplete={
+                mode === "login" ? "current-password" : "new-password"
+              }
+              minLength={12}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              type="password"
+              value={password}
+            />
+          </label>
+          {error ? (
+            <div className="form-error" role="alert">
+              <Icon name="warning" size={16} />
+              {error}
+            </div>
+          ) : null}
+          <button
+            className="button button-dark auth-submit"
+            disabled={busy}
+            type="submit"
+          >
+            {busy
+              ? "Working…"
+              : mode === "login"
+                ? "Sign in"
+                : "Create development administrator"}
+            <Icon name="arrow" size={15} />
+          </button>
+        </form>
+        {bootstrapAvailable ? (
+          <button
+            className="auth-mode"
+            onClick={() => setMode(mode === "login" ? "bootstrap" : "login")}
+            type="button"
+          >
+            {mode === "login"
+              ? "First run? Create the configured development administrator"
+              : "Back to sign in"}
+          </button>
+        ) : null}
+        <p className="auth-boundary">
+          <Icon name="lock" size={14} />
+          The API enforces authentication and role permissions. Live collection
+          remains approval-gated; consumer outreach is disabled.
+        </p>
+      </section>
+    </main>
+  );
 }
 
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
-  useEffect(() => { setToken(sessionStorage.getItem("beyond-fire-radar-token")); setSessionReady(true); }, []);
-  function authenticated(nextToken: string) { setToken(nextToken); }
-  function logout() { sessionStorage.removeItem("beyond-fire-radar-token"); setToken(null); }
-  if (!sessionReady) return <main className="auth-screen"><div className="loading-card">Connecting to the internal workspace…</div></main>;
+  useEffect(() => {
+    setToken(sessionStorage.getItem("beyond-fire-radar-token"));
+    setSessionReady(true);
+  }, []);
+  function authenticated(nextToken: string) {
+    setToken(nextToken);
+  }
+  function logout() {
+    sessionStorage.removeItem("beyond-fire-radar-token");
+    setToken(null);
+  }
+  if (!sessionReady)
+    return (
+      <main className="auth-screen">
+        <div className="loading-card">
+          Connecting to the internal workspace…
+        </div>
+      </main>
+    );
   if (!token) return <AuthScreen onAuthenticated={authenticated} />;
   return <Workspace token={token} onLogout={logout} />;
 }
 
-function Workspace({ token, onLogout }: { token: string; onLogout: () => void }) {
+function Workspace({
+  token,
+  onLogout,
+}: {
+  token: string;
+  onLogout: () => void;
+}) {
   const [activeView, setActiveView] = useState<View>("command");
-  const [user, setUser] = useState<{ id: string; display_name: string; email: string; roles: string[] } | null>(null);
+  const [user, setUser] = useState<{
+    id: string;
+    display_name: string;
+    email: string;
+    roles: string[];
+  } | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [health, setHealth] = useState<Record<string, ProviderHealth>>({});
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [retrievals, setRetrievals] = useState<ImportJob[]>([]);
-  const [propertyImports, setPropertyImports] = useState<PropertyImportSummary[]>([]);
+  const [propertyImports, setPropertyImports] = useState<
+    PropertyImportSummary[]
+  >([]);
   const [incidents, setIncidents] = useState<IncidentSummary[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
-  const [propertyMatch, setPropertyMatch] = useState<PropertyMatch | null>(null);
+  const [propertyMatch, setPropertyMatch] = useState<PropertyMatch | null>(
+    null,
+  );
   const [score, setScore] = useState<Opportunity | null>(null);
   const [alerts, setAlerts] = useState<WorkflowAlert[]>([]);
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [notes, setNotes] = useState<WorkflowNote[]>([]);
-  const [analyticsReport, setAnalyticsReport] = useState<AnalyticsReport | null>(null);
+  const [analyticsReport, setAnalyticsReport] =
+    useState<AnalyticsReport | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [learningPolicy, setLearningPolicy] = useState<LearningPolicy | null>(null);
+  const [learningPolicy, setLearningPolicy] = useState<LearningPolicy | null>(
+    null,
+  );
   const [learningModels, setLearningModels] = useState<LearningModel[]>([]);
   const [learningLoading, setLearningLoading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -515,316 +1072,3388 @@ function Workspace({ token, onLogout }: { token: string; onLogout: () => void })
   const [notice, setNotice] = useState<string | null>(null);
   const loadRequestRef = useRef(0);
 
-  const request = useCallback(<T,>(path: string, init?: RequestInit) => apiRequest<T>(path, token, init), [token]);
-  const dispatchProvider = providers.find((provider) => provider.id === "sarasota.official_dispatch") ?? providers.find((provider) => provider.data_type === "dispatch_snapshot");
-  const propertyProvider = providers.find((provider) => provider.id === "sarasota.property_appraiser") ?? providers.find((provider) => provider.data_type === "property_bulk_file");
-  const currentPropertyImport = propertyImports.find((item) => item.provider_id === propertyProvider?.id && ["imported", "imported_with_rejections"].includes(item.status)) ?? null;
+  const request = useCallback(
+    <T,>(path: string, init?: RequestInit) => apiRequest<T>(path, token, init),
+    [token],
+  );
+  const selectedIncidentProviderId =
+    detail?.provider_id ??
+    incidents.find((incident) => incident.id === selectedId)?.provider_id;
+  const dispatchProvider =
+    providers.find(
+      (provider) =>
+        provider.id === selectedIncidentProviderId &&
+        provider.data_type === "dispatch_snapshot",
+    ) ??
+    providers.find(
+      (provider) => provider.id === "sarasota.official_dispatch",
+    ) ??
+    providers.find((provider) => provider.data_type === "dispatch_snapshot");
+  const preferredPropertyProviderId = propertyProviderForDispatch(
+    selectedIncidentProviderId,
+  );
+  const propertyProvider = preferredPropertyProviderId
+    ? providers.find((provider) => provider.id === preferredPropertyProviderId)
+    : undefined;
+  const currentPropertyImport =
+    propertyImports.find(
+      (item) =>
+        item.provider_id === propertyProvider?.id &&
+        ["imported", "imported_with_rejections"].includes(item.status),
+    ) ?? null;
   const loadWorkspace = useCallback(async () => {
     const requestId = ++loadRequestRef.current;
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
-      const [providerResult, incidentResult, opportunityResult, systemHealthResult, propertyImportResult] = await Promise.all([
-        request<{ providers: Provider[] }>("/api/v1/providers"),
-        request<IncidentSummary[]>("/api/v1/incidents?limit=500"),
-        request<Opportunity[]>("/api/v1/opportunities?limit=500"),
+      const providerResult = await request<{ providers: Provider[] }>(
+        "/api/v1/providers",
+      );
+      const dispatchProviderIds = providerResult.providers
+        .filter((provider) => provider.data_type === "dispatch_snapshot")
+        .map((provider) => provider.id);
+      const loadIncidentPages = async (providerId: string) => {
+        const rows: IncidentSummary[] = [];
+        let offset = 0;
+        while (true) {
+          const page = await request<IncidentSummary[]>(
+            `/api/v1/incidents?provider_id=${encodeURIComponent(providerId)}&offset=${offset}&limit=500`,
+          );
+          rows.push(...page);
+          if (page.length < 500) return rows;
+          offset += page.length;
+        }
+      };
+      const loadOpportunityPages = async () => {
+        const rows: Opportunity[] = [];
+        let offset = 0;
+        while (true) {
+          const page = await request<Opportunity[]>(
+            `/api/v1/opportunities?offset=${offset}&limit=500`,
+          );
+          rows.push(...page);
+          if (page.length < 500) return rows;
+          offset += page.length;
+        }
+      };
+      const loadRetrievalPages = async (providerId: string) => {
+        const rows: ImportJob[] = [];
+        let offset = 0;
+        while (true) {
+          const page = await request<ImportJob[]>(
+            `/api/v1/providers/${encodeURIComponent(providerId)}/retrievals?offset=${offset}&limit=500`,
+          );
+          rows.push(...page);
+          if (page.length < 500) return rows;
+          offset += page.length;
+        }
+      };
+      const [
+        incidentPages,
+        opportunityResult,
+        systemHealthResult,
+        propertyImportResult,
+        userResult,
+      ] = await Promise.all([
+        Promise.all(dispatchProviderIds.map(loadIncidentPages)),
+        loadOpportunityPages(),
         request<SystemHealth>("/healthz"),
-        request<PropertyImportSummary[]>("/api/v1/properties/imports?provider_id=sarasota.property_appraiser"),
+        request<PropertyImportSummary[]>("/api/v1/properties/imports"),
+        request<{
+          id: string;
+          display_name: string;
+          email: string;
+          roles: string[];
+        }>("/api/v1/auth/me"),
       ]);
+      const incidentResult = incidentPages.flat().sort((left, right) => {
+        const leftTime = left.first_event_time
+          ? Date.parse(left.first_event_time)
+          : Number.NEGATIVE_INFINITY;
+        const rightTime = right.first_event_time
+          ? Date.parse(right.first_event_time)
+          : Number.NEGATIVE_INFINITY;
+        return rightTime - leftTime || right.id.localeCompare(left.id);
+      });
       if (requestId !== loadRequestRef.current) return;
-      setUser(null); setProviders(providerResult.providers); setIncidents(incidentResult); setOpportunities(opportunityResult); setSystemHealth(systemHealthResult); setPropertyImports(propertyImportResult);
-      void request<WorkflowAlert[]>("/api/v1/workflow/alerts").then(setAlerts).catch(() => undefined);
+      setUser(userResult);
+      setProviders(providerResult.providers);
+      setIncidents(incidentResult);
+      setOpportunities(opportunityResult);
+      setSystemHealth(systemHealthResult);
+      setPropertyImports(propertyImportResult);
+      void request<WorkflowAlert[]>("/api/v1/workflow/alerts")
+        .then(setAlerts)
+        .catch(() => undefined);
       void Promise.all([
-        Promise.all(providerResult.providers.map(async (provider) => { try { return [provider.id, await request<ProviderHealth>(`/api/v1/providers/${encodeURIComponent(provider.id)}/health`)] as const; } catch { return [provider.id, null] as const; } })),
-        Promise.all(providerResult.providers.map(async (provider) => { try { return await request<ImportJob[]>(`/api/v1/providers/${encodeURIComponent(provider.id)}/retrievals`); } catch { return []; } })),
-      ]).then(([providerHealthEntries, retrievalEntries]) => {
-        if (requestId !== loadRequestRef.current) return;
-        setHealth(Object.fromEntries(providerHealthEntries.filter((entry): entry is readonly [string, ProviderHealth] => entry[1] !== null)));
-        setRetrievals(retrievalEntries.flat());
-      }).catch(() => undefined);
+        Promise.all(
+          providerResult.providers.map(async (provider) => {
+            try {
+              return [
+                provider.id,
+                await request<ProviderHealth>(
+                  `/api/v1/providers/${encodeURIComponent(provider.id)}/health`,
+                ),
+              ] as const;
+            } catch {
+              return [provider.id, null] as const;
+            }
+          }),
+        ),
+        Promise.all(
+          providerResult.providers.map(async (provider) => {
+            try {
+              return await loadRetrievalPages(provider.id);
+            } catch {
+              return [];
+            }
+          }),
+        ),
+      ])
+        .then(([providerHealthEntries, retrievalEntries]) => {
+          if (requestId !== loadRequestRef.current) return;
+          setHealth(
+            Object.fromEntries(
+              providerHealthEntries.filter(
+                (entry): entry is readonly [string, ProviderHealth] =>
+                  entry[1] !== null,
+              ),
+            ),
+          );
+          setRetrievals(
+            retrievalEntries
+              .flat()
+              .sort(
+                (left, right) =>
+                  Date.parse(right.created_at) - Date.parse(left.created_at),
+              ),
+          );
+        })
+        .catch(() => undefined);
     } catch (caught) {
       if (requestId !== loadRequestRef.current) return;
-      if (caught instanceof Error && /authentication|session/i.test(caught.message)) onLogout();
-      else setError(caught instanceof Error ? caught.message : "Workspace data could not be loaded");
+      if (
+        caught instanceof Error &&
+        /authentication|session/i.test(caught.message)
+      )
+        onLogout();
+      else
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Workspace data could not be loaded",
+        );
     } finally {
       if (requestId === loadRequestRef.current) setLoading(false);
     }
   }, [onLogout, request]);
 
-  useEffect(() => { void loadWorkspace(); }, [loadWorkspace]);
+  useEffect(() => {
+    void loadWorkspace();
+  }, [loadWorkspace]);
 
   const loadAnalytics = useCallback(async () => {
-    setAnalyticsLoading(true); setError(null);
+    setAnalyticsLoading(true);
+    setError(null);
     try {
-      const report = await request<AnalyticsReport>("/api/v1/analytics/reports", { method: "POST", body: JSON.stringify({}) });
+      const report = await request<AnalyticsReport>(
+        "/api/v1/analytics/reports",
+        { method: "POST", body: JSON.stringify({}) },
+      );
       setAnalyticsReport(report);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Outcome analytics could not be loaded");
-    } finally { setAnalyticsLoading(false); }
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Outcome analytics could not be loaded",
+      );
+    } finally {
+      setAnalyticsLoading(false);
+    }
   }, [request]);
 
   useEffect(() => {
-    if (activeView === "analytics" && !analyticsReport && !analyticsLoading) void loadAnalytics();
+    if (activeView === "analytics" && !analyticsReport && !analyticsLoading)
+      void loadAnalytics();
   }, [activeView, analyticsLoading, analyticsReport, loadAnalytics]);
 
   const loadLearning = useCallback(async () => {
-    setLearningLoading(true); setError(null);
+    setLearningLoading(true);
+    setError(null);
     try {
       const [policy, models] = await Promise.all([
         request<LearningPolicy>("/api/v1/learning/policy"),
         request<LearningModel[]>("/api/v1/learning/models?limit=20"),
       ]);
-      setLearningPolicy(policy); setLearningModels(models);
+      setLearningPolicy(policy);
+      setLearningModels(models);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Learning posture could not be loaded");
-    } finally { setLearningLoading(false); }
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Learning posture could not be loaded",
+      );
+    } finally {
+      setLearningLoading(false);
+    }
   }, [request]);
 
   useEffect(() => {
-    if (activeView === "learning" && !learningPolicy && !learningLoading) void loadLearning();
+    if (activeView === "learning" && !learningPolicy && !learningLoading)
+      void loadLearning();
   }, [activeView, learningLoading, learningPolicy, loadLearning]);
 
-  const loadIncident = useCallback(async (incidentId: string) => {
-    setSelectedId(incidentId); setBusy(true); setError(null);
-    try {
-      const incident = await request<IncidentDetail>(`/api/v1/incidents/${incidentId}`);
-      setDetail(incident);
-      const optional = async <T,>(path: string, fallback: T): Promise<T> => {
-        try { return await request<T>(path); }
-        catch (caught) {
-          if (caught instanceof Error && /not found/i.test(caught.message)) return fallback;
-          throw caught;
-        }
-      };
-      const [match, opportunity, currentAssignment, incidentNotes] = await Promise.all([
-        optional<PropertyMatch | null>(`/api/v1/incidents/${incidentId}/property-matches`, null),
-        optional<Opportunity | null>(`/api/v1/incidents/${incidentId}/opportunity-score`, null),
-        request<Assignment>(`/api/v1/workflow/incidents/${incidentId}/assignment`).catch(() => null),
-        request<WorkflowNote[]>(`/api/v1/workflow/incidents/${incidentId}/notes`).catch(() => []),
-      ]);
-      let resolvedMatch = match;
-      let resolvedOpportunity = opportunity;
-      if (!resolvedMatch && currentPropertyImport) {
-        try {
-          resolvedMatch = await request<PropertyMatch>(`/api/v1/incidents/${incidentId}/property-matches`, { method: "POST", body: JSON.stringify({ property_provider_id: currentPropertyImport.provider_id, property_import_id: currentPropertyImport.property_import_id }) });
-          resolvedOpportunity = await request<Opportunity>(`/api/v1/incidents/${incidentId}/opportunity-score/rescore`, { method: "POST", body: JSON.stringify({ property_provider_id: currentPropertyImport.provider_id }) });
-        } catch (caught) {
-          setError(caught instanceof Error ? `Property match or score refresh failed: ${caught.message}` : "Property match or score refresh failed");
-        }
+  const loadIncident = useCallback(
+    async (incidentId: string) => {
+      setSelectedId(incidentId);
+      setBusy(true);
+      setError(null);
+      try {
+        const incident = await request<IncidentDetail>(
+          `/api/v1/incidents/${incidentId}`,
+        );
+        setDetail(incident);
+        const optional = async <T,>(path: string, fallback: T): Promise<T> => {
+          try {
+            return await request<T>(path);
+          } catch (caught) {
+            if (caught instanceof Error && /not found/i.test(caught.message))
+              return fallback;
+            throw caught;
+          }
+        };
+        const [match, opportunity, currentAssignment, incidentNotes] =
+          await Promise.all([
+            optional<PropertyMatch | null>(
+              `/api/v1/incidents/${incidentId}/property-matches`,
+              null,
+            ),
+            optional<Opportunity | null>(
+              `/api/v1/incidents/${incidentId}/opportunity-score`,
+              null,
+            ),
+            request<Assignment>(
+              `/api/v1/workflow/incidents/${incidentId}/assignment`,
+            ).catch(() => null),
+            request<WorkflowNote[]>(
+              `/api/v1/workflow/incidents/${incidentId}/notes`,
+            ).catch(() => []),
+          ]);
+        setPropertyMatch(match);
+        setScore(opportunity);
+        setAssignment(currentAssignment);
+        setNotes(incidentNotes);
+      } catch (caught) {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Incident could not be loaded",
+        );
+      } finally {
+        setBusy(false);
       }
-      setPropertyMatch(resolvedMatch); setScore(resolvedOpportunity); setAssignment(currentAssignment); setNotes(incidentNotes);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Incident could not be loaded"); }
-    finally { setBusy(false); }
-  }, [currentPropertyImport, request]);
+    },
+    [request],
+  );
 
-  const refreshSelected = useCallback(async () => { await loadWorkspace(); if (selectedId) await loadIncident(selectedId); }, [loadIncident, loadWorkspace, selectedId]);
+  const openOpportunity = useCallback(
+    async (incidentId: string) => {
+      setActiveView("stream");
+      await loadIncident(incidentId);
+    },
+    [loadIncident],
+  );
 
-  async function uploadDispatch(file: File, providerId: string, authorized: boolean) {
-    setBusy(true); setError(null); setNotice(null);
+  const reloadWorkspace = useCallback(async () => {
+    setBusy(true);
+    setError(null);
     try {
-      const form = new FormData(); form.append("file", file); form.append("authorized_snapshot", providerId === "sarasota.official_dispatch" ? String(authorized) : "false");
-      const imported = await request<ImportJob>(`/api/v1/providers/${encodeURIComponent(providerId)}/snapshots`, { method: "POST", headers: { "Idempotency-Key": `web-${crypto.randomUUID()}` }, body: form });
-      await request(`/api/v1/incidents/process/retrievals/${imported.retrieval_id}`, { method: "POST" });
-      setNotice(`Snapshot processed: ${imported.normalized_record_count} normalized rows; provenance remains ${imported.acquisition_mode}.`); await loadWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Snapshot import failed"); }
-    finally { setBusy(false); }
+      await loadWorkspace();
+      if (selectedId) await loadIncident(selectedId);
+      setNotice(
+        "Workspace reloaded from the current persisted evidence. No match or score was changed.",
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? `Workspace reload failed: ${caught.message}`
+          : "Workspace reload failed",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [loadIncident, loadWorkspace, selectedId]);
+
+  async function uploadDispatch(
+    file: File,
+    providerId: string,
+    authorized: boolean,
+  ) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("authorized_snapshot", String(authorized));
+      const imported = await request<ImportJob>(
+        `/api/v1/providers/${encodeURIComponent(providerId)}/snapshots`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": `web-${crypto.randomUUID()}` },
+          body: form,
+        },
+      );
+      await request(
+        `/api/v1/incidents/process/retrievals/${imported.retrieval_id}`,
+        { method: "POST" },
+      );
+      setNotice(
+        `Snapshot processed: ${imported.normalized_record_count} normalized rows; provenance remains ${imported.acquisition_mode}.`,
+      );
+      await loadWorkspace();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Snapshot import failed",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function uploadProperty(file: File, providerId: string, sourceVersion: string, authorized: boolean) {
+  async function uploadProperty(
+    file: File,
+    providerId: string,
+    sourceVersion: string,
+    authorized: boolean,
+  ) {
     if (!selectedId) return;
-    setBusy(true); setError(null); setNotice(null);
+    setBusy(true);
+    setError(null);
+    setNotice(null);
     try {
-      const form = new FormData(); form.append("file", file); form.append("provider_id", providerId); form.append("source_version", sourceVersion); form.append("idempotency_key", `web-property-${crypto.randomUUID()}`); form.append("import_mode", "full"); form.append("authorized_snapshot", String(authorized));
-      const imported = await request<{ property_import_id: string; normalized_row_count: number; acquisition_mode: string }>("/api/v1/properties/imports", { method: "POST", body: form });
-      const match = await request<PropertyMatch>(`/api/v1/incidents/${selectedId}/property-matches`, { method: "POST", body: JSON.stringify({ property_provider_id: providerId, property_import_id: imported.property_import_id }) });
-      const score = await request<Opportunity>(`/api/v1/incidents/${selectedId}/opportunity-score/rescore`, { method: "POST", body: JSON.stringify({ property_provider_id: providerId }) });
-      setPropertyMatch(match); setScore(score); setNotice(`Property file imported with ${imported.normalized_row_count} accepted rows, matched into ${match.candidate_count} candidates, and rescored.`); await loadWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Property import or matching failed"); }
-    finally { setBusy(false); }
+      const form = new FormData();
+      form.append("file", file);
+      form.append("provider_id", providerId);
+      form.append("source_version", sourceVersion);
+      form.append("idempotency_key", `web-property-${crypto.randomUUID()}`);
+      form.append("import_mode", "full");
+      form.append("authorized_snapshot", String(authorized));
+      const imported = await request<{
+        property_import_id: string;
+        normalized_row_count: number;
+        acquisition_mode: string;
+      }>("/api/v1/properties/imports", { method: "POST", body: form });
+      const match = await request<PropertyMatch>(
+        `/api/v1/incidents/${selectedId}/property-matches`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            property_provider_id: providerId,
+            property_import_id: imported.property_import_id,
+          }),
+        },
+      );
+      const score = detail?.score_eligible
+        ? await request<Opportunity>(
+            `/api/v1/incidents/${selectedId}/opportunity-score/rescore`,
+            {
+              method: "POST",
+              body: JSON.stringify({ property_provider_id: providerId }),
+            },
+          )
+        : null;
+      setPropertyMatch(match);
+      setScore(score);
+      setNotice(
+        `Property file imported with ${imported.normalized_row_count} accepted rows, matched into ${match.candidate_count} candidates${score ? " and rescored" : "; scoring remains limited to explicit fire events"}.`,
+      );
+      await loadWorkspace();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Property import or matching failed",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function matchCurrentProperty() {
     if (!selectedId || !currentPropertyImport) return;
-    setBusy(true); setError(null); setNotice(null);
+    setBusy(true);
+    setError(null);
+    setNotice(null);
     try {
-      const match = await request<PropertyMatch>(`/api/v1/incidents/${selectedId}/property-matches`, { method: "POST", body: JSON.stringify({ property_provider_id: currentPropertyImport.provider_id, property_import_id: currentPropertyImport.property_import_id }) });
+      const match = await request<PropertyMatch>(
+        `/api/v1/incidents/${selectedId}/property-matches`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            property_provider_id: currentPropertyImport.provider_id,
+            property_import_id: currentPropertyImport.property_import_id,
+          }),
+        },
+      );
       setPropertyMatch(match);
-      const result = await request<Opportunity>(`/api/v1/incidents/${selectedId}/opportunity-score/rescore`, { method: "POST", body: JSON.stringify({ property_provider_id: currentPropertyImport.provider_id }) });
+      const result = detail?.score_eligible
+        ? await request<Opportunity>(
+            `/api/v1/incidents/${selectedId}/opportunity-score/rescore`,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                property_provider_id: currentPropertyImport.provider_id,
+              }),
+            },
+          )
+        : null;
       setScore(result);
-      setNotice(`Matched the current ${currentPropertyImport.source_version} snapshot (${currentPropertyImport.normalized_row_count.toLocaleString()} accepted rows) and refreshed the versioned score.`);
+      setNotice(
+        `Matched the current ${currentPropertyImport.source_version} snapshot (${currentPropertyImport.normalized_row_count.toLocaleString()} accepted rows)${result ? " and refreshed the versioned score" : "; scoring remains limited to explicit fire events"}.`,
+      );
       await loadWorkspace();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Property matching or scoring failed"); }
-    finally { setBusy(false); }
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Property matching or scoring failed",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function decideProperty(decision: "confirmed" | "rejected" | "cleared" | "corrected", candidateId?: string) {
+  async function decideProperty(
+    decision: "confirmed" | "rejected" | "cleared" | "corrected",
+    candidateId?: string,
+  ) {
     if (!selectedId) return;
-    const reason = window.prompt("Record the human-review reason:", decision === "confirmed" ? "Confirmed after reviewing source and parcel evidence." : "Human review decision recorded.");
+    const reason = window.prompt(
+      "Record the human-review reason:",
+      decision === "confirmed"
+        ? "Confirmed after reviewing source and parcel evidence."
+        : "Human review decision recorded.",
+    );
     if (!reason) return;
-    setBusy(true); setError(null);
-    try { await request(`/api/v1/incidents/${selectedId}/property-matches/decisions`, { method: "POST", body: JSON.stringify({ decision, candidate_id: candidateId ?? null, reason }) }); setNotice(`Property decision recorded: ${label(decision)}.`); await loadIncident(selectedId); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Property decision failed"); }
-    finally { setBusy(false); }
+    setBusy(true);
+    setError(null);
+    try {
+      await request(
+        `/api/v1/incidents/${selectedId}/property-matches/decisions`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            decision,
+            candidate_id: candidateId ?? null,
+            reason,
+          }),
+        },
+      );
+      setNotice(`Property decision recorded: ${label(decision)}.`);
+      await loadIncident(selectedId);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Property decision failed",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function createScore() {
-    if (!selectedId) return;
-    setBusy(true); setError(null);
-    try { const result = await request<Opportunity>(`/api/v1/incidents/${selectedId}/opportunity-score`, { method: "POST", body: JSON.stringify({ property_provider_id: propertyMatch?.property_provider_id ?? null }) }); setScore(result); setNotice("Provisional score generated with its evidence and hard-gate explanation."); await loadWorkspace(); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Score generation failed"); }
-    finally { setBusy(false); }
+    if (!selectedId || !detail?.score_eligible) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await request<Opportunity>(
+        `/api/v1/incidents/${selectedId}/opportunity-score`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            property_provider_id: propertyMatch?.property_provider_id ?? null,
+          }),
+        },
+      );
+      setScore(result);
+      setNotice(
+        "Provisional score generated with its evidence and hard-gate explanation.",
+      );
+      await loadWorkspace();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Score generation failed",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function changeState(state: string) {
+  async function changeState(state: string, reason: string) {
     if (!selectedId) return;
-    const reason = window.prompt("Record the reason for this status change:", "Reviewed in the internal workbench.");
-    if (!reason) return;
-    setBusy(true); setError(null);
-    try { const result = await request<IncidentDetail>(`/api/v1/incidents/${selectedId}/state`, { method: "PATCH", body: JSON.stringify({ state, reason }) }); setDetail(result); setIncidents((current) => current.map((item) => item.id === result.id ? result : item)); setNotice(`Incident status changed to ${label(state)}.`); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Status change failed"); }
-    finally { setBusy(false); }
+    if (!reason.trim()) {
+      setError("A review reason is required before changing incident state.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await request<IncidentDetail>(
+        `/api/v1/incidents/${selectedId}/state`,
+        { method: "PATCH", body: JSON.stringify({ state, reason }) },
+      );
+      setDetail(result);
+      setIncidents((current) =>
+        current.map((item) => (item.id === result.id ? result : item)),
+      );
+      setNotice(`Incident status changed to ${label(state)}.`);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Status change failed",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function generateAlerts() {
-    setBusy(true); setError(null); setNotice(null);
-    try { const result = await request<{ created_alerts: number; existing_alerts: number; suppressed_alerts: number }>("/api/v1/workflow/alerts/generate", { method: "POST" }); setNotice(`Alert scan complete: ${result.created_alerts} created, ${result.existing_alerts} retained, ${result.suppressed_alerts} suppressed.`); await loadWorkspace(); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Alert scan failed"); }
-    finally { setBusy(false); }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await request<{
+        created_alerts: number;
+        existing_alerts: number;
+        suppressed_alerts: number;
+      }>("/api/v1/workflow/alerts/generate", { method: "POST" });
+      setNotice(
+        `Alert scan complete: ${result.created_alerts} created, ${result.existing_alerts} retained, ${result.suppressed_alerts} suppressed.`,
+      );
+      await loadWorkspace();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Alert scan failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function alertAction(alertId: string, action: "acknowledge" | "snooze" | "resolve" | "suppress" | "revoke" | "escalate" | "unsuppress") {
-    const reason = window.prompt("Record the internal workflow reason:", action === "acknowledge" ? "Reviewed in the internal queue." : "Internal workflow decision recorded.");
+  async function alertAction(
+    alertId: string,
+    action:
+      | "acknowledge"
+      | "snooze"
+      | "resolve"
+      | "suppress"
+      | "revoke"
+      | "escalate"
+      | "unsuppress",
+  ) {
+    const reason = window.prompt(
+      "Record the internal workflow reason:",
+      action === "acknowledge"
+        ? "Reviewed in the internal queue."
+        : "Internal workflow decision recorded.",
+    );
     if (!reason) return;
-    setBusy(true); setError(null);
-    const snoozed_until = action === "snooze" ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : undefined;
-    try { await request<WorkflowAlert>(`/api/v1/workflow/alerts/${alertId}/${action}`, { method: "POST", body: JSON.stringify({ reason, snoozed_until }) }); setNotice(`Alert ${label(action)}.`); await loadWorkspace(); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Alert action failed"); }
-    finally { setBusy(false); }
+    setBusy(true);
+    setError(null);
+    const snoozed_until =
+      action === "snooze"
+        ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        : undefined;
+    try {
+      await request<WorkflowAlert>(
+        `/api/v1/workflow/alerts/${alertId}/${action}`,
+        { method: "POST", body: JSON.stringify({ reason, snoozed_until }) },
+      );
+      setNotice(`Alert ${label(action)}.`);
+      await loadWorkspace();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Alert action failed",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function assignToMe() {
+  async function assignToMe(reason: string) {
     if (!selectedId || !user) return;
-    const reason = window.prompt("Record the assignment reason:", "Assigned for internal review.");
-    if (!reason) return;
-    setBusy(true); setError(null);
-    try { const result = await request<Assignment>(`/api/v1/workflow/incidents/${selectedId}/assignment`, { method: "POST", body: JSON.stringify({ assignee_user_id: user.id, reason }) }); setAssignment(result); setNotice("Incident assigned to the current reviewer."); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Assignment failed"); }
-    finally { setBusy(false); }
+    if (!reason.trim()) {
+      setError("An assignment reason is required.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await request<Assignment>(
+        `/api/v1/workflow/incidents/${selectedId}/assignment`,
+        {
+          method: "POST",
+          body: JSON.stringify({ assignee_user_id: user.id, reason }),
+        },
+      );
+      setAssignment(result);
+      setNotice("Incident assigned to the current reviewer.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Assignment failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function addWorkflowNote() {
+  async function addWorkflowNote(body: string) {
     if (!selectedId) return;
-    const body = window.prompt("Add an immutable internal review note:");
-    if (!body) return;
-    setBusy(true); setError(null);
-    try { const note = await request<WorkflowNote>(`/api/v1/workflow/incidents/${selectedId}/notes`, { method: "POST", body: JSON.stringify({ body, note_type: "review" }) }); setNotes((current) => [...current, note]); setNotice("Internal note recorded and audited."); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Note creation failed"); }
-    finally { setBusy(false); }
+    if (!body.trim()) {
+      setError("A note body is required.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const note = await request<WorkflowNote>(
+        `/api/v1/workflow/incidents/${selectedId}/notes`,
+        { method: "POST", body: JSON.stringify({ body, note_type: "review" }) },
+      );
+      setNotes((current) => [...current, note]);
+      setNotice("Internal note recorded and audited.");
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Note creation failed",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function importClients(file: File) {
-    setBusy(true); setError(null); setNotice(null);
-    try { const form = new FormData(); form.append("file", file); const result = await request<{ accepted_row_count: number; rejected_row_count: number }>("/api/v1/workflow/clients/import", { method: "POST", headers: { "Idempotency-Key": `web-client-${crypto.randomUUID()}` }, body: form }); setNotice(`Existing-client import recorded: ${result.accepted_row_count} accepted, ${result.rejected_row_count} rejected. No outreach was sent.`); await loadWorkspace(); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Client import failed"); }
-    finally { setBusy(false); }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const result = await request<{
+        accepted_row_count: number;
+        rejected_row_count: number;
+      }>("/api/v1/workflow/clients/import", {
+        method: "POST",
+        headers: { "Idempotency-Key": `web-client-${crypto.randomUUID()}` },
+        body: form,
+      });
+      setNotice(
+        `Existing-client import recorded: ${result.accepted_row_count} accepted, ${result.rejected_row_count} rejected. No outreach was sent.`,
+      );
+      await loadWorkspace();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Client import failed",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const activeLabel = navigation.find((item) => item.id === activeView)?.label ?? "Command center";
+  const activeLabel =
+    navigation.find((item) => item.id === activeView)?.label ?? "Review desk";
+  const scopeLabel = jurisdictionLabel(providers);
   const pollingStatus = livePollingStatus(systemHealth);
-  return <div className="app-shell">
-    <aside className="rail" aria-label="Primary navigation"><div className="brand-lockup"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div><div><p className="brand-name">Beyond</p><p className="brand-product">Fire Radar</p></div></div><div className="rail-rule" /><p className="rail-label">Workspace</p><nav className="nav-list">{navigation.map((item) => <button aria-label={`${item.label}: ${item.detail}`} aria-current={activeView === item.id ? "page" : undefined} className={`nav-item ${activeView === item.id ? "active" : ""}`} key={item.id} onClick={() => setActiveView(item.id)} type="button"><Icon name={item.icon} /><span><strong>{item.label}</strong><small>{item.detail}</small></span></button>)}</nav><div className="rail-bottom"><div className="rail-status"><span className="status-dot status-dot-amber" /><span><strong>Research environment</strong><small>Human review required</small></span></div><button className="user-chip user-chip-button" onClick={onLogout} type="button"><span className="avatar">{user?.display_name.slice(0, 2).toUpperCase() ?? "SA"}</span><span><strong>{user?.display_name ?? "Reviewer"}</strong><small>Sign out</small></span><Icon name="logout" size={15} /></button></div></aside>
-    <main className="content">
-      <header className="topbar"><div className="mobile-brand"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div><strong>Beyond Fire Radar</strong></div><div className="crumbs"><span>Workspace</span><span className="crumb-divider">/</span><strong>{activeLabel}</strong></div><div className="top-actions"><button className="icon-button" aria-label="Refresh workspace" onClick={() => void refreshSelected()} type="button"><Icon name="refresh" /></button><button className="icon-button notification" aria-label="Notifications" type="button"><Icon name="bell" /><span /></button><div className="top-divider" /><SourcePill compact modes={detail?.source_acquisition_modes ?? incidents.flatMap((item) => item.source_acquisition_modes)} /></div></header>
-      <div className="workspace">
-        <div className="workspace-head"><div><p className="eyebrow">FIELD OPERATIONS <span>·</span> SARASOTA COUNTY</p><h1>{activeView === "command" ? "Review the signal, keep the uncertainty." : activeLabel}</h1><p className="workspace-lede">{activeView === "command" ? "Inspect source-preserving incidents, property evidence, and provisional research rankings in one governed workspace." : viewDescription(activeView)}</p></div><div className="head-actions"><SourcePill modes={detail?.source_acquisition_modes ?? incidents.flatMap((item) => item.source_acquisition_modes)} /><button className="button button-light" onClick={() => void refreshSelected()} type="button"><Icon name="refresh" size={15} /> Refresh</button></div></div>
-        <div className="safety-banner" role="status"><div className="banner-icon"><Icon name="shield" size={17} /></div><div><strong>Research environment</strong><span>{pollingStatus.banner}</span></div><span className="banner-status"><span className={`status-dot ${pollingStatus.active ? "status-dot-green" : "status-dot-amber"}`} /> {pollingStatus.active ? "Active" : "Protected"}</span></div>
-        {error ? <div className="inline-error" role="alert"><Icon name="warning" size={17} /><span><strong>Action needs attention.</strong> {error}</span><button onClick={() => setError(null)} type="button">Dismiss</button></div> : null}
-        {notice ? <div className="inline-success" role="status"><Icon name="check" size={16} /><span>{notice}</span><button onClick={() => setNotice(null)} type="button">Dismiss</button></div> : null}
-        {loading ? <div className="loading-panel"><span className="spinner" /> Loading governed workspace data…</div> : <>
-          {activeView === "command" ? <CommandView incidents={incidents} detail={detail} propertyMatch={propertyMatch} score={score} providers={providers} assignment={assignment} notes={notes} onAssign={assignToMe} onAddNote={addWorkflowNote} opportunities={opportunities} health={health} retrievals={retrievals} dispatchProvider={dispatchProvider} propertyProvider={propertyProvider} currentPropertyImport={currentPropertyImport} pollingStatus={pollingStatus} busy={busy} onDispatchUpload={uploadDispatch} onSelectIncident={(id) => void loadIncident(id)} onViewStream={() => setActiveView("stream")} onState={changeState} onPropertyUpload={uploadProperty} onPropertyDecision={decideProperty} onMatchCurrentProperty={matchCurrentProperty} onScore={createScore} /> : null}
-          {activeView === "stream" ? <StreamView incidents={incidents} detail={detail} propertyMatch={propertyMatch} score={score} providers={providers} currentPropertyImport={currentPropertyImport} busy={busy} assignment={assignment} notes={notes} onAssign={assignToMe} onAddNote={addWorkflowNote} onSelect={(id) => void loadIncident(id)} onState={changeState} onPropertyUpload={uploadProperty} onPropertyDecision={decideProperty} onMatchCurrentProperty={matchCurrentProperty} onScore={createScore} onRefresh={() => void refreshSelected()} /> : null}
-          {activeView === "opportunities" ? <OpportunityView opportunities={opportunities} incidents={incidents} onSelect={(id) => void loadIncident(id)} /> : null}
-          {activeView === "workflow" ? <WorkflowView alerts={alerts} busy={busy} onGenerate={generateAlerts} onAction={alertAction} onImportClients={importClients} /> : null}
-          {activeView === "analytics" ? <AnalyticsView report={analyticsReport} loading={analyticsLoading} onRefresh={loadAnalytics} /> : null}
-          {activeView === "learning" ? <LearningView policy={learningPolicy} models={learningModels} loading={learningLoading} onRefresh={loadLearning} /> : null}
-          {activeView === "health" ? <HealthView providers={providers} health={health} retrievals={retrievals} pollingStatus={pollingStatus} /> : null}
-          {activeView === "settings" ? <SettingsView user={user} onLogout={onLogout} pollingStatus={pollingStatus} /> : null}
-        </>}
+  return (
+    <div className="app-shell">
+      <aside className="rail" aria-label="Primary navigation">
+        <div className="brand-lockup">
+          <div className="brand-mark" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div>
+            <p className="brand-name">Beyond</p>
+            <p className="brand-product">Fire Radar</p>
+          </div>
+        </div>
+        <label className="mobile-view-select">
+          <span>Workspace view</span>
+          <select
+            aria-label="Workspace view"
+            onChange={(event) => setActiveView(event.target.value as View)}
+            value={activeView}
+          >
+            {navigation.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <nav className="nav-list">
+          {(["Review", "Intelligence", "System"] as const).map((group) => (
+            <div className="nav-group" key={group}>
+              <p className="rail-label">{group}</p>
+              {navigation
+                .filter((item) => item.group === group)
+                .map((item) => (
+                  <button
+                    aria-label={`${item.label}: ${item.detail}`}
+                    aria-current={activeView === item.id ? "page" : undefined}
+                    className={`nav-item ${activeView === item.id ? "active" : ""}`}
+                    key={item.id}
+                    onClick={() => setActiveView(item.id)}
+                    type="button"
+                  >
+                    <Icon name={item.icon} />
+                    <span>
+                      <strong>{item.label}</strong>
+                      <small>{item.detail}</small>
+                    </span>
+                  </button>
+                ))}
+            </div>
+          ))}
+        </nav>
+        <div className="rail-bottom">
+          <div className="rail-status">
+            <span className="status-dot status-dot-amber" />
+            <span>
+              <strong>Research environment</strong>
+              <small>Human review required</small>
+            </span>
+          </div>
+          <button
+            className="user-chip user-chip-button"
+            onClick={onLogout}
+            type="button"
+          >
+            <span className="avatar">
+              {user?.display_name.slice(0, 2).toUpperCase() ?? "SA"}
+            </span>
+            <span>
+              <strong>{user?.display_name ?? "Reviewer"}</strong>
+              <small>Sign out</small>
+            </span>
+            <Icon name="logout" size={15} />
+          </button>
+        </div>
+      </aside>
+      <main className="content">
+        <header className="topbar">
+          <div className="mobile-brand">
+            <div className="brand-mark" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <strong>Beyond Fire Radar</strong>
+          </div>
+          <div className="crumbs">
+            <span>
+              {navigation.find((item) => item.id === activeView)?.group}
+            </span>
+            <span className="crumb-divider">/</span>
+            <strong>{activeLabel}</strong>
+          </div>
+          <div className="top-actions">
+            <button
+              className="button button-light"
+              aria-label="Reload persisted workspace data"
+              disabled={busy}
+              onClick={() => void reloadWorkspace()}
+              type="button"
+            >
+              <Icon name="refresh" size={15} /> Reload data
+            </button>
+            <button
+              className="icon-button notification"
+              aria-label={`Open workflow alerts${alerts.length ? `, ${alerts.length} loaded` : ""}`}
+              onClick={() => setActiveView("workflow")}
+              type="button"
+            >
+              <Icon name="bell" />
+              {alerts.length ? <span /> : null}
+            </button>
+          </div>
+        </header>
+        <div className="workspace">
+          <div className="workspace-head">
+            <div>
+              <p className="eyebrow">
+                {navigation
+                  .find((item) => item.id === activeView)
+                  ?.group.toUpperCase()}{" "}
+                <span>·</span> {scopeLabel.toUpperCase()}
+              </p>
+              <h1>{activeLabel}</h1>
+              <p className="workspace-lede">{viewDescription(activeView)}</p>
+            </div>
+            <div className="head-actions">
+              <SourcePill
+                modes={
+                  detail?.source_acquisition_modes ??
+                  incidents.flatMap((item) => item.source_acquisition_modes)
+                }
+              />
+            </div>
+          </div>
+          <div className="safety-banner" role="status">
+            <div className="banner-icon">
+              <Icon name="shield" size={17} />
+            </div>
+            <div>
+              <strong>Research environment</strong>
+              <span>{pollingStatus.banner}</span>
+            </div>
+            <span className="banner-status">
+              <span
+                className={`status-dot ${pollingStatus.active ? "status-dot-green" : "status-dot-amber"}`}
+              />{" "}
+              {pollingStatus.active ? "Active" : "Protected"}
+            </span>
+          </div>
+          {error ? (
+            <div className="inline-error" role="alert">
+              <Icon name="warning" size={17} />
+              <span>
+                <strong>Action needs attention.</strong> {error}
+              </span>
+              <button onClick={() => setError(null)} type="button">
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+          {notice ? (
+            <div className="inline-success" role="status">
+              <Icon name="check" size={16} />
+              <span>{notice}</span>
+              <button onClick={() => setNotice(null)} type="button">
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+          {loading ? (
+            <div className="loading-panel">
+              <span className="spinner" /> Loading governed workspace data…
+            </div>
+          ) : (
+            <>
+              {activeView === "command" ? (
+                <CommandView
+                  incidents={incidents}
+                  selectedId={selectedId}
+                  detail={detail}
+                  propertyMatch={propertyMatch}
+                  score={score}
+                  providers={providers}
+                  assignment={assignment}
+                  notes={notes}
+                  onAssign={assignToMe}
+                  onAddNote={addWorkflowNote}
+                  opportunities={opportunities}
+                  health={health}
+                  currentPropertyImport={currentPropertyImport}
+                  busy={busy}
+                  onSelectIncident={(id) => void loadIncident(id)}
+                  onViewStream={() => setActiveView("stream")}
+                  onState={changeState}
+                  onPropertyUpload={uploadProperty}
+                  onPropertyDecision={decideProperty}
+                  onMatchCurrentProperty={matchCurrentProperty}
+                  onScore={createScore}
+                />
+              ) : null}
+              {activeView === "stream" ? (
+                <StreamView
+                  incidents={incidents}
+                  selectedId={selectedId}
+                  detail={detail}
+                  propertyMatch={propertyMatch}
+                  score={score}
+                  providers={providers}
+                  currentPropertyImport={currentPropertyImport}
+                  busy={busy}
+                  assignment={assignment}
+                  notes={notes}
+                  onAssign={assignToMe}
+                  onAddNote={addWorkflowNote}
+                  onSelect={(id) => void loadIncident(id)}
+                  onState={changeState}
+                  onPropertyUpload={uploadProperty}
+                  onPropertyDecision={decideProperty}
+                  onMatchCurrentProperty={matchCurrentProperty}
+                  onScore={createScore}
+                  onReload={() => void reloadWorkspace()}
+                />
+              ) : null}
+              {activeView === "opportunities" ? (
+                <OpportunityView
+                  opportunities={opportunities}
+                  incidents={incidents}
+                  onSelect={(id) => void openOpportunity(id)}
+                />
+              ) : null}
+              {activeView === "workflow" ? (
+                <WorkflowView
+                  alerts={alerts}
+                  busy={busy}
+                  onGenerate={generateAlerts}
+                  onAction={alertAction}
+                  onImportClients={importClients}
+                />
+              ) : null}
+              {activeView === "analytics" ? (
+                <AnalyticsView
+                  report={analyticsReport}
+                  loading={analyticsLoading}
+                  onRefresh={loadAnalytics}
+                />
+              ) : null}
+              {activeView === "learning" ? (
+                <LearningView
+                  policy={learningPolicy}
+                  models={learningModels}
+                  loading={learningLoading}
+                  onRefresh={loadLearning}
+                />
+              ) : null}
+              {activeView === "health" ? (
+                <HealthView
+                  providers={providers}
+                  health={health}
+                  retrievals={retrievals}
+                  pollingStatus={pollingStatus}
+                  dispatchProvider={dispatchProvider}
+                  busy={busy}
+                  onDispatchUpload={uploadDispatch}
+                />
+              ) : null}
+              {activeView === "settings" ? (
+                <SettingsView
+                  user={user}
+                  onLogout={onLogout}
+                  pollingStatus={pollingStatus}
+                />
+              ) : null}
+            </>
+          )}
+        </div>
+        <footer className="content-footer">
+          <span>Beyond Adjusting · Internal research only</span>
+          <span>Source provenance is required for every decision</span>
+        </footer>
+      </main>
+    </div>
+  );
+}
+
+function viewDescription(view: View) {
+  return {
+    command:
+      "Find the next incident, inspect its evidence, and keep every decision traceable.",
+    stream:
+      "Search a bounded evidence queue and open incident detail without changing persisted data.",
+    opportunities:
+      "Prioritize current versioned rankings with their gates and evidence posture visible.",
+    workflow:
+      "Review internal alerts, assignments, notes, and suppression controls.",
+    analytics:
+      "Inspect manual labels, funnel outcomes, and reproducible directional metrics.",
+    learning:
+      "Review versioned learning mechanics that remain inactive until evidence and approval gates pass.",
+    health:
+      "Manage controlled imports and inspect freshness, provenance, and integration posture.",
+    settings:
+      "Review the governance controls for this deliberately constrained workspace.",
+  }[view];
+}
+
+function CommandView({
+  incidents,
+  selectedId,
+  detail,
+  propertyMatch,
+  score,
+  providers,
+  opportunities,
+  health,
+  currentPropertyImport,
+  assignment,
+  notes,
+  onAssign,
+  onAddNote,
+  busy,
+  onSelectIncident,
+  onViewStream,
+  onState,
+  onPropertyUpload,
+  onPropertyDecision,
+  onMatchCurrentProperty,
+  onScore,
+}: {
+  incidents: IncidentSummary[];
+  selectedId: string | null;
+  detail: IncidentDetail | null;
+  propertyMatch: PropertyMatch | null;
+  score: Opportunity | null;
+  providers: Provider[];
+  opportunities: Opportunity[];
+  health: Record<string, ProviderHealth>;
+  currentPropertyImport?: PropertyImportSummary | null;
+  assignment: Assignment | null;
+  notes: WorkflowNote[];
+  onAssign: (reason: string) => Promise<void>;
+  onAddNote: (body: string) => Promise<void>;
+  busy: boolean;
+  onSelectIncident: (id: string) => void;
+  onViewStream: () => void;
+  onState: (state: string, reason: string) => Promise<void>;
+  onPropertyUpload: (
+    file: File,
+    providerId: string,
+    sourceVersion: string,
+    authorized: boolean,
+  ) => Promise<void>;
+  onPropertyDecision: (
+    decision: "confirmed" | "rejected" | "cleared" | "corrected",
+    candidateId?: string,
+  ) => Promise<void>;
+  onMatchCurrentProperty?: () => Promise<void>;
+  onScore: () => Promise<void>;
+}) {
+  const [detailOpen, setDetailOpen] = useState(Boolean(detail));
+  const detailSurfaceRef = useRef<HTMLDivElement>(null);
+  const detailId = detail?.id;
+  useEffect(() => {
+    if (!detailId) return;
+    setDetailOpen(true);
+    window.requestAnimationFrame(() =>
+      detailSurfaceRef.current?.scrollIntoView({ block: "start" }),
+    );
+  }, [detailId]);
+  const reviewCount = incidents.filter(
+    (item) =>
+      item.review_band !== "auto_linked" || item.contradiction_count > 0,
+  ).length;
+  const latestSuccess = Object.values(health)
+    .flatMap((item) =>
+      item.last_successful_retrieval ? [item.last_successful_retrieval] : [],
+    )
+    .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
+  const priorityIncidents = [...incidents]
+    .sort(
+      (left, right) =>
+        Number(
+          right.review_band !== "auto_linked" || right.contradiction_count > 0,
+        ) -
+          Number(
+            left.review_band !== "auto_linked" || left.contradiction_count > 0,
+          ) ||
+        Date.parse(right.first_event_time ?? "") -
+          Date.parse(left.first_event_time ?? ""),
+    )
+    .slice(0, 8);
+  return (
+    <>
+      <section className="metric-grid" aria-label="Review desk metrics">
+        <Metric
+          label="Active incidents"
+          value={String(incidents.length)}
+          note="Current canonical ledger"
+        />
+        <Metric
+          label="Needs attention"
+          value={String(reviewCount)}
+          note="Review band or contradiction"
+          tone="amber"
+        />
+        <Metric
+          label="Opportunities"
+          value={String(opportunities.length)}
+          note="Current versioned rankings"
+        />
+        <Metric
+          label="Latest retrieval"
+          value={latestSuccess ? "Current" : "Unknown"}
+          note={
+            latestSuccess
+              ? formatDate(latestSuccess, true)
+              : "No successful retrieval"
+          }
+          tone={latestSuccess ? "green" : "amber"}
+        />
+      </section>
+      <div
+        className={`dashboard-grid review-desk-grid${detailOpen ? " has-detail" : ""}`}
+      >
+        <section className="panel panel-queue" aria-labelledby="queue-title">
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">PRIORITY QUEUE</p>
+              <h2 id="queue-title">Incidents needing review</h2>
+            </div>
+            <button
+              className="text-button"
+              onClick={onViewStream}
+              type="button"
+            >
+              Open all incidents <Icon name="arrow" size={15} />
+            </button>
+          </div>
+          {priorityIncidents.length === 0 ? (
+            <EmptyState
+              title="No canonical incidents loaded"
+              body="Open Sources and Health to import a permitted county snapshot."
+            />
+          ) : (
+            <IncidentRows
+              incidents={priorityIncidents}
+              selectedId={selectedId}
+              onSelect={(id) => {
+                setDetailOpen(true);
+                onSelectIncident(id);
+              }}
+            />
+          )}
+        </section>
+        {detail ? (
+          <div className="detail-surface" ref={detailSurfaceRef}>
+            <button
+              className="button button-light mobile-back-button"
+              onClick={() => setDetailOpen(false)}
+              type="button"
+            >
+              <Icon name="arrow" size={14} /> Back to priority queue
+            </button>
+            <IncidentWorkbench
+              busy={busy}
+              detail={detail}
+              match={propertyMatch}
+              score={score}
+              providers={providers}
+              currentPropertyImport={currentPropertyImport}
+              assignment={assignment}
+              notes={notes}
+              onAssign={onAssign}
+              onAddNote={onAddNote}
+              onState={onState}
+              onPropertyUpload={onPropertyUpload}
+              onPropertyDecision={onPropertyDecision}
+              onMatchCurrentProperty={onMatchCurrentProperty}
+              onScore={onScore}
+            />
+          </div>
+        ) : (
+          <section className="panel review-placeholder">
+            <EmptyState
+              title="Choose an incident"
+              body="Select a priority row to inspect classification, source evidence, property resolution, and the current versioned ranking here."
+            />
+          </section>
+        )}
       </div>
-      <footer className="content-footer"><span>Beyond Adjusting · Internal research only</span><span>Source provenance is required for every decision</span></footer>
-    </main>
-  </div>;
+    </>
+  );
 }
 
-function viewDescription(view: View) { return { command: "Inspect source-preserving incidents and evidence.", stream: "Source-preserving incident updates from approved Sarasota snapshots.", opportunities: "Provisional research ranking, never an empirical probability.", workflow: "Internal alerts, assignments, notes, and suppression controls.", analytics: "Manual labels, funnel outcomes, and reproducible directional metrics.", learning: "Versioned learning mechanics remain inactive until real evidence and approval gates pass.", health: "Freshness, provenance, and integration posture at a glance.", settings: "Governance controls for a deliberately constrained workspace." }[view]; }
-
-function CommandView({ incidents, detail, propertyMatch, score, providers, opportunities, health, retrievals, dispatchProvider, propertyProvider, currentPropertyImport, pollingStatus, assignment, notes, onAssign, onAddNote, busy, onDispatchUpload, onSelectIncident, onViewStream, onState, onPropertyUpload, onPropertyDecision, onMatchCurrentProperty, onScore }: { incidents: IncidentSummary[]; detail: IncidentDetail | null; propertyMatch: PropertyMatch | null; score: Opportunity | null; providers: Provider[]; opportunities: Opportunity[]; health: Record<string, ProviderHealth>; retrievals: ImportJob[]; dispatchProvider?: Provider; propertyProvider?: Provider; currentPropertyImport?: PropertyImportSummary | null; pollingStatus: ReturnType<typeof livePollingStatus>; assignment: Assignment | null; notes: WorkflowNote[]; onAssign: () => Promise<void>; onAddNote: () => Promise<void>; busy: boolean; onDispatchUpload: (file: File, providerId: string, authorized: boolean) => Promise<void>; onSelectIncident: (id: string) => void; onViewStream: () => void; onState: (state: string) => Promise<void>; onPropertyUpload: (file: File, providerId: string, sourceVersion: string, authorized: boolean) => Promise<void>; onPropertyDecision: (decision: "confirmed" | "rejected" | "cleared" | "corrected", candidateId?: string) => Promise<void>; onMatchCurrentProperty?: () => Promise<void>; onScore: () => Promise<void> }) {
-  const reviewCount = incidents.filter((item) => item.review_band !== "auto_linked" || item.contradiction_count > 0).length;
-  const currentHealth = dispatchProvider ? health[dispatchProvider.id] : undefined;
-  const sourceDate = currentHealth?.last_successful_retrieval ? formatDate(currentHealth.last_successful_retrieval, true) : "Unknown";
-  return <><section className="metric-grid" aria-label="Workspace metrics"><Metric label="Canonical incidents" value={String(incidents.length)} note="Current active ledger" /><Metric label="Needs attention" value={String(reviewCount)} note="Review band or contradiction" tone="amber" /><Metric label="Source freshness" value={sourceDate === "Unknown" ? "Unknown" : "Current"} note={sourceDate === "Unknown" ? "No successful snapshot yet" : sourceDate} tone={sourceDate === "Unknown" ? "amber" : "green"} /><Metric label="Opportunities" value={String(opportunities.length)} note="Current score runs; not probabilities" /></section><div className="dashboard-grid"><section className="panel panel-queue" aria-labelledby="queue-title"><div className="panel-heading"><div><p className="section-kicker">REVIEW QUEUE</p><h2 id="queue-title">Canonical incidents</h2></div><button className="text-button" onClick={onViewStream} type="button">Open stream <Icon name="arrow" size={15} /></button></div>{incidents.length === 0 ? <EmptyState title="No canonical incidents loaded" body="Import a permitted Sarasota manual snapshot or select an existing retrieval to begin review." /> : <IncidentRows incidents={incidents.slice(0, 8)} onSelect={onSelectIncident} />}</section><aside className="right-stack"><SnapshotImporter busy={busy} provider={dispatchProvider} onUpload={onDispatchUpload} /><section className="panel source-panel" aria-labelledby="source-title"><div className="panel-heading"><div><p className="section-kicker">SOURCE POSTURE</p><h2 id="source-title">Sarasota dispatch</h2></div><span className="mini-tag">{sourceModeLabel(incidents.flatMap((item) => item.source_acquisition_modes))}</span></div><div className="source-graphic"><div className="source-orbit orbit-one" /><div className="source-orbit orbit-two" /><div className="source-core"><Icon name="database" size={19} /></div></div><div className="source-row"><span>Collection mode</span><strong>{sourceModeLabel(incidents.flatMap((item) => item.source_acquisition_modes))}</strong></div><div className="source-row"><span>Live polling</span><strong className={pollingStatus.active ? "green-text" : "amber-text"}>{pollingStatus.label}</strong></div><div className="source-row"><span>Retrievals</span><strong>{retrievals.length}</strong></div><p className="panel-note">{dispatchProvider?.limitations ?? "Provider metadata is unavailable."} Manual availability does not imply legal approval.</p></section><section className="panel principles-panel" aria-labelledby="principles-title"><p className="section-kicker">REVIEW PRINCIPLES</p><h2 id="principles-title">Evidence before escalation.</h2><ul className="principles"><li><span>01</span>Keep raw source rows inspectable.</li><li><span>02</span>Abstain when property evidence is weak.</li><li><span>03</span>Record every human decision.</li></ul></section></aside></div><div className="operations-grid"><section className="panel map-panel" aria-labelledby="map-title"><div className="panel-heading"><div><p className="section-kicker">GEOSPATIAL CONTEXT</p><h2 id="map-title">Incident map</h2></div><span className="soft-label">Source coordinates only</span></div><MapSurface incidents={detail ? [detail] : []} /></section><section className="panel workbench-panel" aria-labelledby="workbench-title"><div className="panel-heading"><div><p className="section-kicker">PROPERTY INTELLIGENCE</p><h2 id="workbench-title">Resolution posture</h2></div><span className="mini-tag">{propertyProvider ? "Manual files" : "Unavailable"}</span></div>{detail ? <IncidentWorkbench busy={busy} detail={detail} match={propertyMatch} score={score} providers={providers} currentPropertyImport={currentPropertyImport} assignment={assignment} notes={notes} onAssign={onAssign} onAddNote={onAddNote} onState={onState} onPropertyUpload={onPropertyUpload} onPropertyDecision={onPropertyDecision} onMatchCurrentProperty={onMatchCurrentProperty} onScore={onScore} /> : <EmptyState title="Select an incident to inspect" body="The workbench exposes original observations, candidate parcels, contradictions, score evidence, and human decisions." />}</section></div></>;
-}
-
-function SnapshotImporter({ provider, busy, onUpload }: { provider?: Provider; busy: boolean; onUpload: (file: File, providerId: string, authorized: boolean) => Promise<void> }) {
+function SnapshotImporter({
+  provider,
+  busy,
+  onUpload,
+}: {
+  provider?: Provider;
+  busy: boolean;
+  onUpload: (
+    file: File,
+    providerId: string,
+    authorized: boolean,
+  ) => Promise<void>;
+}) {
   const [authorized, setAuthorized] = useState(false);
-  const [providerId, setProviderId] = useState(provider?.id ?? "fixture.sarasota.dispatch");
-  useEffect(() => { if (provider) setProviderId(provider.id); }, [provider]);
-  const official = providerId === "sarasota.official_dispatch";
-  return <section className="panel importer-panel" aria-labelledby="import-title"><div className="panel-heading"><div><p className="section-kicker">CONTROLLED IMPORT</p><h2 id="import-title">Add a dispatch snapshot</h2></div><Icon name="upload" size={18} /></div><div className="importer-body"><label>Source<select value={providerId} onChange={(event) => setProviderId(event.target.value)}><option value="fixture.sarasota.dispatch">Repository fixture · test only</option><option disabled={!provider || provider.id !== "sarasota.official_dispatch"} value="sarasota.official_dispatch">Sarasota County · manual snapshot</option></select></label>{official ? <label className="check-label"><input checked={authorized} onChange={(event) => setAuthorized(event.target.checked)} type="checkbox" /> I confirm this file is an approved internal snapshot; this attestation is not legal approval.</label> : <p className="field-note">Fixture imports are labeled synthetic and cannot satisfy operational alert eligibility.</p>}<label className="file-drop"><Icon name="upload" size={16} /><span>Choose CSV, JSON, or HTML snapshot<input accept=".csv,.json,.html,text/csv,application/json,text/html" disabled={busy || (official && !authorized)} onChange={(event) => { const file = event.target.files?.[0]; if (file) void onUpload(file, providerId, authorized); event.currentTarget.value = ""; }} type="file" /></span></label></div></section>;
+  const [providerId, setProviderId] = useState(
+    provider?.id ?? "fixture.sarasota.dispatch",
+  );
+  useEffect(() => {
+    if (provider) setProviderId(provider.id);
+  }, [provider]);
+  const official = !providerId.startsWith("fixture.");
+  const enabledProvider = true;
+  return (
+    <section className="panel importer-panel" aria-labelledby="import-title">
+      <div className="panel-heading">
+        <div>
+          <p className="section-kicker">CONTROLLED IMPORT</p>
+          <h2 id="import-title">Add a dispatch snapshot</h2>
+        </div>
+        <Icon name="upload" size={18} />
+      </div>
+      <div className="importer-body">
+        <label>
+          Source
+          <select
+            value={providerId}
+            onChange={(event) => setProviderId(event.target.value)}
+          >
+            <option value="fixture.sarasota.dispatch">
+              Repository fixture · test only
+            </option>
+            <option
+              disabled={!enabledProvider}
+              value="sarasota.official_dispatch"
+            >
+              Sarasota County · manual snapshot
+            </option>
+            <option disabled={!enabledProvider} value="miami_dade.fire_calls">
+              Miami-Dade County · active calls snapshot
+            </option>
+            <option
+              disabled={!enabledProvider}
+              value="broward.efirstalert_dispatch"
+            >
+              Broward County · eFirstAlert snapshot
+            </option>
+          </select>
+        </label>
+        {official ? (
+          <label className="check-label">
+            <input
+              checked={authorized}
+              onChange={(event) => setAuthorized(event.target.checked)}
+              type="checkbox"
+            />{" "}
+            I confirm this file is an approved internal snapshot; this
+            attestation is not legal approval.
+          </label>
+        ) : (
+          <p className="field-note">
+            Fixture imports are labeled synthetic and cannot satisfy operational
+            alert eligibility.
+          </p>
+        )}
+        <label className="file-drop">
+          <Icon name="upload" size={16} />
+          <span>
+            Choose CSV, JSON, or HTML snapshot
+            <input
+              accept=".csv,.json,.html,text/csv,application/json,text/html"
+              disabled={busy || (official && !authorized)}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void onUpload(file, providerId, authorized);
+                event.currentTarget.value = "";
+              }}
+              type="file"
+            />
+          </span>
+        </label>
+      </div>
+    </section>
+  );
 }
 
-function IncidentRows({ incidents, onSelect }: { incidents: IncidentSummary[]; onSelect: (id: string) => void }) { return <div className="incident-list">{incidents.map((incident) => <button className="incident-row" key={incident.id} onClick={() => onSelect(incident.id)} type="button"><span className={`incident-marker ${incident.contradiction_count ? "amber" : ""}`}><Icon name={incident.contradiction_count ? "warning" : "pulse"} size={15} /></span><span className="incident-row-main"><strong>{incident.canonical_location ?? "Location not resolved"}</strong><small>{label(incident.classification_family)} · {formatDate(incident.first_event_time, true)}</small></span><span className="incident-row-meta"><b>{label(incident.review_band)}</b><small>{incident.observation_count} observations</small></span><Icon name="arrow" size={15} /></button>)}</div>; }
+function IncidentRows({
+  incidents,
+  selectedId = null,
+  onSelect,
+}: {
+  incidents: IncidentSummary[];
+  selectedId?: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="incident-list">
+      {incidents.map((incident) => (
+        <button
+          aria-current={selectedId === incident.id ? "true" : undefined}
+          className={`incident-row ${selectedId === incident.id ? "active" : ""}`}
+          key={incident.id}
+          onClick={() => onSelect(incident.id)}
+          type="button"
+        >
+          <span
+            className={`incident-marker ${incident.contradiction_count ? "amber" : ""}`}
+          >
+            <Icon
+              name={incident.contradiction_count ? "warning" : "pulse"}
+              size={15}
+            />
+          </span>
+          <span className="incident-row-main">
+            <strong>
+              {incident.canonical_location ?? "Location not resolved"}
+            </strong>
+            <small>
+              {providerShortLabel(incident.provider_id)} ·{" "}
+              {label(incident.classification_family)} ·{" "}
+              {formatDate(incident.first_event_time, true)}
+            </small>
+          </span>
+          <span className="incident-row-meta">
+            <b>{label(incident.review_band)}</b>
+            <small>
+              {incident.observation_count} retained row
+              {incident.observation_count === 1 ? "" : "s"}
+            </small>
+          </span>
+          <Icon name="arrow" size={15} />
+        </button>
+      ))}
+    </div>
+  );
+}
 
-function StreamView({ incidents, detail, propertyMatch, score, providers, currentPropertyImport, busy, assignment, notes, onAssign, onAddNote, onSelect, onState, onPropertyUpload, onPropertyDecision, onMatchCurrentProperty, onScore, onRefresh }: { incidents: IncidentSummary[]; detail: IncidentDetail | null; propertyMatch: PropertyMatch | null; score: Opportunity | null; providers: Provider[]; currentPropertyImport?: PropertyImportSummary | null; busy: boolean; assignment: Assignment | null; notes: WorkflowNote[]; onAssign: () => Promise<void>; onAddNote: () => Promise<void>; onSelect: (id: string) => void; onState: (state: string) => Promise<void>; onPropertyUpload: (file: File, providerId: string, sourceVersion: string, authorized: boolean) => Promise<void>; onPropertyDecision: (decision: "confirmed" | "rejected" | "cleared" | "corrected", candidateId?: string) => Promise<void>; onMatchCurrentProperty?: () => Promise<void>; onScore: () => Promise<void>; onRefresh: () => void }) {
+function StreamView({
+  incidents,
+  selectedId,
+  detail,
+  propertyMatch,
+  score,
+  providers,
+  currentPropertyImport,
+  busy,
+  assignment,
+  notes,
+  onAssign,
+  onAddNote,
+  onSelect,
+  onState,
+  onPropertyUpload,
+  onPropertyDecision,
+  onMatchCurrentProperty,
+  onScore,
+  onReload,
+}: {
+  incidents: IncidentSummary[];
+  selectedId: string | null;
+  detail: IncidentDetail | null;
+  propertyMatch: PropertyMatch | null;
+  score: Opportunity | null;
+  providers: Provider[];
+  currentPropertyImport?: PropertyImportSummary | null;
+  busy: boolean;
+  assignment: Assignment | null;
+  notes: WorkflowNote[];
+  onAssign: (reason: string) => Promise<void>;
+  onAddNote: (body: string) => Promise<void>;
+  onSelect: (id: string) => void;
+  onState: (state: string, reason: string) => Promise<void>;
+  onPropertyUpload: (
+    file: File,
+    providerId: string,
+    sourceVersion: string,
+    authorized: boolean,
+  ) => Promise<void>;
+  onPropertyDecision: (
+    decision: "confirmed" | "rejected" | "cleared" | "corrected",
+    candidateId?: string,
+  ) => Promise<void>;
+  onMatchCurrentProperty?: () => Promise<void>;
+  onScore: () => Promise<void>;
+  onReload: () => void;
+}) {
   const [query, setQuery] = useState("");
-  const filtered = incidents.filter((item) => `${item.canonical_location ?? ""} ${item.classification_family} ${item.state}`.toLowerCase().includes(query.toLowerCase()));
-  return <div className="stream-layout"><section className="panel stream-panel" aria-labelledby="stream-title"><div className="panel-heading"><div><p className="section-kicker">SOURCE-PRESERVING VIEW</p><h2 id="stream-title">Incident stream</h2></div><div className="view-tools"><label className="search-field"><Icon name="search" size={14} /><input aria-label="Search incidents" onChange={(event) => setQuery(event.target.value)} placeholder="Search location or type" value={query} /></label><button className="button button-light" onClick={onRefresh} type="button"><Icon name="refresh" size={15} /> Refresh</button></div></div>{filtered.length === 0 ? <EmptyState title="No incidents match this view" body="Adjust the search or import a governed Sarasota snapshot. Empty results do not imply that no source data exists." /> : <IncidentRows incidents={filtered} onSelect={onSelect} />}</section>{detail ? <IncidentWorkbench busy={busy} detail={detail} match={propertyMatch} score={score} providers={providers} currentPropertyImport={currentPropertyImport} assignment={assignment} notes={notes} onAssign={onAssign} onAddNote={onAddNote} onState={onState} onPropertyUpload={onPropertyUpload} onPropertyDecision={onPropertyDecision} onMatchCurrentProperty={onMatchCurrentProperty} onScore={onScore} /> : <section className="panel detail-placeholder"><EmptyState title="Select an incident" body="Choose a row to inspect the complete timeline, original observations, provenance, property candidates, and ranking evidence." /></section>}</div>;
+  const [providerFilter, setProviderFilter] = useState("all");
+  const [attentionFilter, setAttentionFilter] = useState("all");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const [page, setPage] = useState(1);
+  const [detailOpen, setDetailOpen] = useState(Boolean(detail));
+  const detailSurfaceRef = useRef<HTMLDivElement>(null);
+  const pageSize = 50;
+  const providerIds = [...new Set(incidents.map((item) => item.provider_id))];
+  const filtered = incidents
+    .filter((item) => {
+      const matchesQuery =
+        `${item.canonical_location ?? ""} ${item.classification_family} ${item.state}`
+          .toLowerCase()
+          .includes(query.toLowerCase());
+      const matchesProvider =
+        providerFilter === "all" || item.provider_id === providerFilter;
+      const needsAttention =
+        item.review_band !== "auto_linked" || item.contradiction_count > 0;
+      const matchesAttention =
+        attentionFilter === "all" ||
+        (attentionFilter === "attention" ? needsAttention : !needsAttention);
+      return matchesQuery && matchesProvider && matchesAttention;
+    })
+    .sort((left, right) => {
+      const delta =
+        Date.parse(right.first_event_time ?? "") -
+        Date.parse(left.first_event_time ?? "");
+      return sortOrder === "newest" ? delta : -delta;
+    });
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const pageRows = filtered.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize,
+  );
+  useEffect(() => {
+    setPage(1);
+  }, [query, providerFilter, attentionFilter, sortOrder]);
+  const detailId = detail?.id;
+  useEffect(() => {
+    if (!detailId) return;
+    setDetailOpen(true);
+    window.requestAnimationFrame(() =>
+      detailSurfaceRef.current?.scrollIntoView({ block: "start" }),
+    );
+  }, [detailId]);
+  const selectIncident = (id: string) => {
+    setDetailOpen(true);
+    onSelect(id);
+  };
+  return (
+    <div
+      className={`stream-layout ${detail && detailOpen ? "has-detail" : ""}`}
+    >
+      <section className="panel stream-panel" aria-labelledby="stream-title">
+        <div className="panel-heading stream-heading">
+          <div>
+            <p className="section-kicker">BOUNDED EVIDENCE QUEUE</p>
+            <h2 id="stream-title">Incidents</h2>
+            <p className="panel-note inline-note">
+              {filtered.length.toLocaleString()} matching · showing at most{" "}
+              {pageSize}
+            </p>
+          </div>
+          <button
+            className="button button-light"
+            disabled={busy}
+            onClick={onReload}
+            type="button"
+          >
+            <Icon name="refresh" size={15} /> Reload data
+          </button>
+        </div>
+        <div className="queue-filters">
+          <label className="search-field">
+            <Icon name="search" size={14} />
+            <input
+              aria-label="Search incidents"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search location, type, or state"
+              value={query}
+            />
+          </label>
+          <label>
+            <span>Source</span>
+            <select
+              aria-label="Filter incidents by source"
+              onChange={(event) => setProviderFilter(event.target.value)}
+              value={providerFilter}
+            >
+              <option value="all">All sources</option>
+              {providerIds.map((id) => (
+                <option key={id} value={id}>
+                  {providerShortLabel(id)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Review posture</span>
+            <select
+              aria-label="Filter incidents by review posture"
+              onChange={(event) => setAttentionFilter(event.target.value)}
+              value={attentionFilter}
+            >
+              <option value="all">All records</option>
+              <option value="attention">Needs attention</option>
+              <option value="clear">Auto-linked</option>
+            </select>
+          </label>
+          <label>
+            <span>Order</span>
+            <select
+              aria-label="Sort incidents"
+              onChange={(event) =>
+                setSortOrder(event.target.value as "newest" | "oldest")
+              }
+              value={sortOrder}
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
+          </label>
+        </div>
+        {pageRows.length === 0 ? (
+          <EmptyState
+            title="No incidents match this view"
+            body="Adjust the filters or open Sources and Health to inspect governed imports."
+          />
+        ) : (
+          <IncidentRows
+            incidents={pageRows}
+            selectedId={selectedId}
+            onSelect={selectIncident}
+          />
+        )}
+        <Pagination
+          page={safePage}
+          pageCount={pageCount}
+          total={filtered.length}
+          pageSize={pageSize}
+          onPage={setPage}
+        />
+      </section>
+      {detail && detailOpen ? (
+        <div className="detail-surface" ref={detailSurfaceRef}>
+          <button
+            className="button button-light mobile-back-button"
+            onClick={() => setDetailOpen(false)}
+            type="button"
+          >
+            <Icon name="arrow" size={15} /> Back to incident queue
+          </button>
+          <IncidentWorkbench
+            busy={busy}
+            detail={detail}
+            match={propertyMatch}
+            score={score}
+            providers={providers}
+            currentPropertyImport={currentPropertyImport}
+            assignment={assignment}
+            notes={notes}
+            onAssign={onAssign}
+            onAddNote={onAddNote}
+            onState={onState}
+            onPropertyUpload={onPropertyUpload}
+            onPropertyDecision={onPropertyDecision}
+            onMatchCurrentProperty={onMatchCurrentProperty}
+            onScore={onScore}
+          />
+        </div>
+      ) : (
+        <section className="panel detail-placeholder">
+          <EmptyState
+            title="Select an incident"
+            body="Choose a row to inspect its timeline, source observations, property candidates, and versioned ranking."
+          />
+        </section>
+      )}
+    </div>
+  );
 }
 
-function IncidentWorkbench({ detail, match, score, providers, currentPropertyImport, busy, assignment, notes, onAssign, onAddNote, onState, onPropertyUpload, onPropertyDecision, onMatchCurrentProperty, onScore }: { detail: IncidentDetail; match: PropertyMatch | null; score: Opportunity | null; providers: Provider[]; currentPropertyImport?: PropertyImportSummary | null; busy: boolean; assignment: Assignment | null; notes: WorkflowNote[]; onAssign: () => Promise<void>; onAddNote: () => Promise<void>; onState: (state: string) => Promise<void>; onPropertyUpload: (file: File, providerId: string, sourceVersion: string, authorized: boolean) => Promise<void>; onPropertyDecision: (decision: "confirmed" | "rejected" | "cleared" | "corrected", candidateId?: string) => Promise<void>; onMatchCurrentProperty?: () => Promise<void>; onScore: () => Promise<void> }) {
-  const [tab, setTab] = useState<"overview" | "evidence" | "property" | "score">("overview");
+function Pagination({
+  page,
+  pageCount,
+  total,
+  pageSize,
+  onPage,
+}: {
+  page: number;
+  pageCount: number;
+  total: number;
+  pageSize: number;
+  onPage: (page: number) => void;
+}) {
+  if (!total) return null;
+  const first = (page - 1) * pageSize + 1;
+  const last = Math.min(page * pageSize, total);
+  return (
+    <nav className="pagination" aria-label="Queue pages">
+      <span>
+        {first.toLocaleString()}–{last.toLocaleString()} of{" "}
+        {total.toLocaleString()}
+      </span>
+      <div>
+        <button
+          className="button button-light"
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+          type="button"
+        >
+          Previous
+        </button>
+        <span>
+          Page {page} of {pageCount}
+        </span>
+        <button
+          className="button button-light"
+          disabled={page >= pageCount}
+          onClick={() => onPage(page + 1)}
+          type="button"
+        >
+          Next
+        </button>
+      </div>
+    </nav>
+  );
+}
+
+function IncidentWorkbench({
+  detail,
+  match,
+  score,
+  providers,
+  currentPropertyImport,
+  busy,
+  assignment,
+  notes,
+  onAssign,
+  onAddNote,
+  onState,
+  onPropertyUpload,
+  onPropertyDecision,
+  onMatchCurrentProperty,
+  onScore,
+}: {
+  detail: IncidentDetail;
+  match: PropertyMatch | null;
+  score: Opportunity | null;
+  providers: Provider[];
+  currentPropertyImport?: PropertyImportSummary | null;
+  busy: boolean;
+  assignment: Assignment | null;
+  notes: WorkflowNote[];
+  onAssign: (reason: string) => Promise<void>;
+  onAddNote: (body: string) => Promise<void>;
+  onState: (state: string, reason: string) => Promise<void>;
+  onPropertyUpload: (
+    file: File,
+    providerId: string,
+    sourceVersion: string,
+    authorized: boolean,
+  ) => Promise<void>;
+  onPropertyDecision: (
+    decision: "confirmed" | "rejected" | "cleared" | "corrected",
+    candidateId?: string,
+  ) => Promise<void>;
+  onMatchCurrentProperty?: () => Promise<void>;
+  onScore: () => Promise<void>;
+}) {
+  const [tab, setTab] = useState<
+    "overview" | "evidence" | "property" | "score"
+  >("overview");
+  const [proposedState, setProposedState] = useState(detail.state);
+  const [stateReason, setStateReason] = useState("");
+  const [assignmentReason, setAssignmentReason] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
   const tabs = ["overview", "evidence", "property", "score"] as const;
+  const preferredPropertyProviderId = propertyProviderForDispatch(
+    detail.provider_id,
+  );
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
-  function keydown(event: KeyboardEvent<HTMLButtonElement>, index: number) { const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0; const target = direction ? (index + direction + tabs.length) % tabs.length : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : -1; if (target >= 0) { event.preventDefault(); setTab(tabs[target]); refs.current[target]?.focus(); } }
-  return <section className="panel incident-workbench" aria-labelledby="detail-title"><div className="detail-header"><div><p className="section-kicker">INCIDENT WORKBENCH</p><h2 id="detail-title">{detail.canonical_location ?? "Location unresolved"}</h2><p>{label(detail.classification_family)} · {label(detail.confidence_band)} · {detail.source_acquisition_modes.join(", ") || "source mode unknown"}</p></div><div className="detail-actions"><span className={`state-pill ${detail.contradiction_count ? "warning" : ""}`}>{label(detail.state)}</span><select aria-label="Change incident state" disabled={busy} onChange={(event) => { if (event.target.value !== detail.state) void onState(event.target.value); }} value={detail.state}>{["new", "awaiting_review", "property_unresolved", "likely_structure", "high_structure", "confirmed", "Disposition pending", "downgraded", "false_alarm", "closed", "suppressed"].map((state) => <option key={state} value={state}>{label(state)}</option>)}</select></div></div><div className="workflow-strip"><span>{assignment?.assignee_user_id ? `Assigned · ${assignment.assignee_user_id.slice(0, 8)}` : "Unassigned"}</span><button className="button button-light" disabled={busy} onClick={() => void onAssign()} type="button">{assignment?.assignee_user_id ? "Reassign to me" : "Assign to me"}</button><button className="button button-light" disabled={busy} onClick={() => void onAddNote()} type="button">Add note</button><span>{notes.length} internal note{notes.length === 1 ? "" : "s"}</span></div><div className="workbench-tabs" role="tablist" aria-label="Incident detail sections">{tabs.map((item, index) => <button aria-controls="incident-tabpanel" aria-selected={tab === item} className={tab === item ? "active" : ""} id={`incident-tab-${item}`} key={item} onClick={() => setTab(item)} onKeyDown={(event) => keydown(event, index)} ref={(element) => { refs.current[index] = element; }} role="tab" tabIndex={tab === item ? 0 : -1} type="button">{label(item)}</button>)}</div><div className="detail-body" id="incident-tabpanel" role="tabpanel" aria-labelledby={`incident-tab-${tab}`}>{tab === "overview" ? <OverviewTab detail={detail} /> : null}{tab === "evidence" ? <EvidenceTab detail={detail} /> : null}{tab === "property" ? <PropertyPanel busy={busy} match={match} providers={providers} currentPropertyImport={currentPropertyImport} onUpload={onPropertyUpload} onDecision={onPropertyDecision} onMatchCurrentProperty={onMatchCurrentProperty} /> : null}{tab === "score" ? <ScorePanel busy={busy} score={score} onScore={onScore} /> : null}</div></section>;
+  const allowedStates = [
+    detail.state,
+    ...(incidentTransitions[detail.state] ?? []),
+  ];
+  useEffect(() => {
+    setProposedState(detail.state);
+    setStateReason("");
+    setAssignmentReason("");
+    setNoteDraft("");
+  }, [detail.id, detail.state]);
+  function keydown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const direction =
+      event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    const target = direction
+      ? (index + direction + tabs.length) % tabs.length
+      : event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? tabs.length - 1
+          : -1;
+    if (target >= 0) {
+      event.preventDefault();
+      setTab(tabs[target]);
+      refs.current[target]?.focus();
+    }
+  }
+  return (
+    <section
+      className="panel incident-workbench"
+      aria-labelledby="detail-title"
+    >
+      <div className="detail-header">
+        <div>
+          <p className="section-kicker">INCIDENT WORKBENCH</p>
+          <h2 id="detail-title">
+            {detail.canonical_location ?? "Location unresolved"}
+          </h2>
+          <p>
+            {providerShortLabel(detail.provider_id)} ·{" "}
+            {label(detail.classification_family)} ·{" "}
+            {label(detail.confidence_band)} ·{" "}
+            {detail.source_acquisition_modes.map(label).join(", ") ||
+              "Source mode unknown"}
+          </p>
+        </div>
+        <span
+          className={`state-pill ${detail.contradiction_count ? "warning" : ""}`}
+        >
+          {label(detail.state)}
+        </span>
+      </div>
+      <div className="state-editor">
+        <label>
+          <span>Next incident state</span>
+          <select
+            aria-label="Next incident state"
+            disabled={busy || allowedStates.length === 1}
+            onChange={(event) => setProposedState(event.target.value)}
+            value={proposedState}
+          >
+            {allowedStates.map((state) => (
+              <option key={state} value={state}>
+                {label(state)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {proposedState !== detail.state ? (
+          <>
+            <label className="reason-field">
+              <span>Required review reason</span>
+              <textarea
+                onChange={(event) => setStateReason(event.target.value)}
+                placeholder="Describe the evidence behind this state change"
+                rows={2}
+                value={stateReason}
+              />
+            </label>
+            <button
+              className="button button-dark"
+              disabled={busy || !stateReason.trim()}
+              onClick={() => void onState(proposedState, stateReason)}
+              type="button"
+            >
+              Save state change
+            </button>
+          </>
+        ) : (
+          <p>
+            Only valid next states are available. Opening this record does not
+            change data.
+          </p>
+        )}
+      </div>
+      <details className="review-actions">
+        <summary>
+          <span>Review actions</span>
+          <small>
+            {assignment?.assignee_user_id
+              ? `Assigned · ${assignment.assignee_user_id.slice(0, 8)}`
+              : "Unassigned"}{" "}
+            · {notes.length} note{notes.length === 1 ? "" : "s"}
+          </small>
+        </summary>
+        <div className="review-action-grid">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onAssign(assignmentReason).then(() =>
+                setAssignmentReason(""),
+              );
+            }}
+          >
+            <label>
+              <span>Assignment reason</span>
+              <input
+                onChange={(event) => setAssignmentReason(event.target.value)}
+                placeholder="Why this reviewer is taking the record"
+                value={assignmentReason}
+              />
+            </label>
+            <button
+              className="button button-light"
+              disabled={busy || !assignmentReason.trim()}
+              type="submit"
+            >
+              {assignment?.assignee_user_id ? "Reassign to me" : "Assign to me"}
+            </button>
+          </form>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onAddNote(noteDraft).then(() => setNoteDraft(""));
+            }}
+          >
+            <label>
+              <span>Immutable review note</span>
+              <textarea
+                onChange={(event) => setNoteDraft(event.target.value)}
+                placeholder="Record an evidence or review note"
+                rows={2}
+                value={noteDraft}
+              />
+            </label>
+            <button
+              className="button button-light"
+              disabled={busy || !noteDraft.trim()}
+              type="submit"
+            >
+              Add note
+            </button>
+          </form>
+        </div>
+      </details>
+      <div
+        className="workbench-tabs"
+        role="tablist"
+        aria-label="Incident detail sections"
+      >
+        {tabs.map((item, index) => (
+          <button
+            aria-controls="incident-tabpanel"
+            aria-selected={tab === item}
+            className={tab === item ? "active" : ""}
+            id={`incident-tab-${item}`}
+            key={item}
+            onClick={() => setTab(item)}
+            onKeyDown={(event) => keydown(event, index)}
+            ref={(element) => {
+              refs.current[index] = element;
+            }}
+            role="tab"
+            tabIndex={tab === item ? 0 : -1}
+            type="button"
+          >
+            {label(item)}
+          </button>
+        ))}
+      </div>
+      <div
+        className="detail-body"
+        id="incident-tabpanel"
+        role="tabpanel"
+        aria-labelledby={`incident-tab-${tab}`}
+      >
+        {tab === "overview" ? <OverviewTab detail={detail} /> : null}
+        {tab === "evidence" ? <EvidenceTab detail={detail} /> : null}
+        {tab === "property" ? (
+          <PropertyPanel
+            busy={busy}
+            match={match}
+            providers={providers}
+            propertyProviderId={preferredPropertyProviderId}
+            currentPropertyImport={currentPropertyImport}
+            onUpload={onPropertyUpload}
+            onDecision={onPropertyDecision}
+            onMatchCurrentProperty={onMatchCurrentProperty}
+          />
+        ) : null}
+        {tab === "score" ? (
+          <ScorePanel
+            busy={busy}
+            score={score}
+            scoreEligible={detail.score_eligible}
+            scoreEligibilityReason={detail.score_eligibility_reason}
+            onScore={onScore}
+          />
+        ) : null}
+      </div>
+    </section>
+  );
 }
 
-function OverviewTab({ detail }: { detail: IncidentDetail }) { return <div className="detail-columns"><div><div className="detail-facts"><Fact label="Classification" value={label(detail.classification_family)} /><Fact label="Confidence" value={`${Math.round(detail.classification_confidence * 100)}% · ${label(detail.confidence_band)}`} /><Fact label="Event window" value={`${formatDate(detail.first_event_time, true)} → ${formatDate(detail.last_event_time, true)}`} /><Fact label="Observations" value={`${detail.observation_count} source rows`} /></div><section className="subpanel"><div className="subheading"><h3>Incident timeline</h3><span>{detail.timeline.length} events</span></div>{detail.timeline.length ? <div className="timeline">{detail.timeline.map((event, index) => <div className="timeline-item" key={String(event.id ?? index)}><span className="timeline-dot" /><div><strong>{label(String(event.event_type ?? "event"))}</strong><small>{formatDate(String(event.occurred_at ?? ""), true)} · {String(event.details && typeof event.details === "object" ? JSON.stringify(event.details) : event.details ?? "No details")}</small></div></div>)}</div> : <p className="muted-copy">No timeline events are available.</p>}</section></div><div><section className="subpanel"><div className="subheading"><h3>Source posture</h3><span className="mini-tag">Traceable</span></div><p className="muted-copy">Retrievals: {detail.source_retrieval_ids.join(", ") || "not available"}</p><p className="muted-copy">Source modes: {detail.source_acquisition_modes.join(", ") || "not available"}</p><p className="muted-copy">Classification explanation: {String(detail.classification_explanation.summary ?? "Versioned source-faithful classification.")}</p></section><MapSurface incidents={[detail]} /></div></div>; }
+function OverviewTab({ detail }: { detail: IncidentDetail }) {
+  return (
+    <div className="detail-columns">
+      <div>
+        <div className="detail-facts">
+          <Fact
+            label="Classification"
+            value={label(detail.classification_family)}
+          />
+          <Fact
+            label="Confidence"
+            value={`${Math.round(detail.classification_confidence * 100)}% · ${label(detail.confidence_band)}`}
+          />
+          <Fact
+            label="Event window"
+            value={`${formatDate(detail.first_event_time, true)} → ${formatDate(detail.last_event_time, true)}`}
+          />
+          <Fact
+            label="Evidence"
+            value={`${detail.evidence_groups.length} event${detail.evidence_groups.length === 1 ? "" : "s"} · ${detail.observation_count} retained row${detail.observation_count === 1 ? "" : "s"}`}
+          />
+        </div>
+        <section className="subpanel">
+          <div className="subheading">
+            <h3>Incident timeline</h3>
+            <span>{detail.timeline.length} events</span>
+          </div>
+          {detail.timeline.length ? (
+            <div className="timeline">
+              {detail.timeline.map((event, index) => (
+                <div className="timeline-item" key={String(event.id ?? index)}>
+                  <span className="timeline-dot" />
+                  <div>
+                    <strong>
+                      {label(String(event.event_type ?? "event"))}
+                    </strong>
+                    <small>
+                      {formatDate(String(event.occurred_at ?? ""), true)} ·{" "}
+                      {String(
+                        event.details && typeof event.details === "object"
+                          ? JSON.stringify(event.details)
+                          : (event.details ?? "No details"),
+                      )}
+                    </small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="muted-copy">No timeline events are available.</p>
+          )}
+        </section>
+      </div>
+      <div>
+        <section className="subpanel">
+          <div className="subheading">
+            <h3>Source posture</h3>
+            <span className="mini-tag">Traceable</span>
+          </div>
+          <p className="muted-copy mono-copy">
+            Retrievals:{" "}
+            {detail.source_retrieval_ids.join(", ") || "not available"}
+          </p>
+          <p className="muted-copy">
+            Source modes:{" "}
+            {detail.source_acquisition_modes.map(label).join(", ") ||
+              "not available"}
+          </p>
+          <p className="muted-copy">
+            Classification explanation:{" "}
+            {String(
+              detail.classification_explanation.summary ??
+                "Versioned source-faithful classification.",
+            )}
+          </p>
+        </section>
+        <CoordinateEvidence detail={detail} />
+      </div>
+    </div>
+  );
+}
 
-function EvidenceTab({ detail }: { detail: IncidentDetail }) { return <div className="detail-columns"><section className="subpanel"><div className="subheading"><h3>Original observations</h3><span>{detail.observations.length} rows</span></div>{detail.observations.length ? <div className="observation-list">{detail.observations.map((observation) => <article className="observation-card" key={observation.id}><strong>{observation.original_event_type}</strong><span>{observation.original_location}</span><small>{formatDate(observation.event_time, true)} · {observation.source_record_id} · parser {observation.parser_version}</small></article>)}</div> : <EmptyState title="No observations available" body="The source relationship is unavailable for this incident." />}</section><section className="subpanel"><div className="subheading"><h3>Contradictions and linkage</h3><span>{detail.evidence.length + detail.match_decisions.length} records</span></div>{detail.evidence.length ? <div className="evidence-list">{detail.evidence.map((item, index) => <article className="evidence-card warning" key={String(item.id ?? index)}><Icon name="warning" size={15} /><div><strong>{label(String(item.code ?? item.evidence_type ?? "evidence"))}</strong><p>{String(item.summary ?? "Source evidence retained.")}</p></div></article>)}</div> : <p className="muted-copy">No contradictory evidence is recorded. Linkage decisions remain available in the source history.</p>}<p className="muted-copy">{detail.current_explanation.summary ? String(detail.current_explanation.summary) : "The canonical incident retains source-row relationships and deterministic/probabilistic explanations."}</p></section></div>; }
+function EvidenceTab({ detail }: { detail: IncidentDetail }) {
+  const contradictions = Array.from(
+    new Map(
+      detail.evidence
+        .filter((item) => item.evidence_type === "contradictory")
+        .map((item) => [`${String(item.code)}|${String(item.summary)}`, item]),
+    ).values(),
+  );
+  const linkagePatterns = new Set(
+    detail.match_decisions.map(
+      (item) =>
+        `${String(item.decision)}|${String(item.stage)}|${String(item.explanation && typeof item.explanation === "object" ? JSON.stringify(item.explanation) : (item.explanation ?? ""))}`,
+    ),
+  ).size;
+  return (
+    <div className="detail-columns">
+      <section className="subpanel">
+        <div className="subheading">
+          <h3>Evidence events</h3>
+          <span>
+            {detail.evidence_groups.length} event
+            {detail.evidence_groups.length === 1 ? "" : "s"} ·{" "}
+            {detail.observation_count} retained rows
+          </span>
+        </div>
+        <p className="muted-copy">
+          Repeated captures with the same source event, time, wording, and
+          location are grouped here. Raw rows remain retained for audit.
+        </p>
+        {detail.evidence_groups.length ? (
+          <div className="observation-list">
+            {detail.evidence_groups.map((group) => {
+              const observation = group.representative;
+              return (
+                <article className="observation-card" key={group.id}>
+                  <strong>{observation.original_event_type}</strong>
+                  <span>{observation.original_location}</span>
+                  <small>
+                    {formatDate(observation.event_time, true)} · source event{" "}
+                    {observation.source_event_id ??
+                      observation.source_record_id}{" "}
+                    · parser {observation.parser_version}
+                  </small>
+                  <small>
+                    {group.retained_observation_count} retained rows ·{" "}
+                    {group.source_capture_count} source captures ·{" "}
+                    {group.source_record_ids.length} source records
+                  </small>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState
+            title="No evidence events available"
+            body="The source relationship is unavailable for this incident."
+          />
+        )}
+      </section>
+      <section className="subpanel">
+        <div className="subheading">
+          <h3>Contradictions and linkage</h3>
+          <span>
+            {contradictions.length} contradictions · {linkagePatterns} linkage
+            patterns
+          </span>
+        </div>
+        {contradictions.length ? (
+          <div className="evidence-list">
+            {contradictions.map((item, index) => (
+              <article
+                className="evidence-card warning"
+                key={String(item.id ?? index)}
+              >
+                <Icon name="warning" size={15} />
+                <div>
+                  <strong>
+                    {label(
+                      String(item.code ?? item.evidence_type ?? "evidence"),
+                    )}
+                  </strong>
+                  <p>{String(item.summary ?? "Source evidence retained.")}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="muted-copy">
+            No contradictory evidence is recorded. Linkage history remains
+            available without repeating every retained source row.
+          </p>
+        )}
+        <p className="muted-copy">
+          {detail.current_explanation.summary
+            ? String(detail.current_explanation.summary)
+            : "The canonical incident retains source-row relationships and deterministic/probabilistic explanations."}
+        </p>
+      </section>
+    </div>
+  );
+}
 
-function PropertyPanel({ match, providers, currentPropertyImport, busy, onUpload, onDecision, onMatchCurrentProperty }: { match: PropertyMatch | null; providers: Provider[]; currentPropertyImport?: PropertyImportSummary | null; busy: boolean; onUpload: (file: File, providerId: string, sourceVersion: string, authorized: boolean) => Promise<void>; onDecision: (decision: "confirmed" | "rejected" | "cleared" | "corrected", candidateId?: string) => Promise<void>; onMatchCurrentProperty?: () => Promise<void> }) {
-  const propertyProvider = providers.find((provider) => provider.data_type === "property_bulk_file");
+function PropertyPanel({
+  match,
+  providers,
+  propertyProviderId,
+  currentPropertyImport,
+  busy,
+  onUpload,
+  onDecision,
+  onMatchCurrentProperty,
+}: {
+  match: PropertyMatch | null;
+  providers: Provider[];
+  propertyProviderId?: string;
+  currentPropertyImport?: PropertyImportSummary | null;
+  busy: boolean;
+  onUpload: (
+    file: File,
+    providerId: string,
+    sourceVersion: string,
+    authorized: boolean,
+  ) => Promise<void>;
+  onDecision: (
+    decision: "confirmed" | "rejected" | "cleared" | "corrected",
+    candidateId?: string,
+  ) => Promise<void>;
+  onMatchCurrentProperty?: () => Promise<void>;
+}) {
+  const propertyProvider = propertyProviderId
+    ? providers.find((provider) => provider.id === propertyProviderId)
+    : undefined;
   const [authorized, setAuthorized] = useState(false);
   const [sourceVersion, setSourceVersion] = useState("manual-2026-08");
-  const official = propertyProvider?.id === "sarasota.property_appraiser";
-  const snapshotDetail = currentPropertyImport ? `${currentPropertyImport.acquisition_mode} · ${currentPropertyImport.authorization_basis ?? "authorization basis not recorded"} · hash ${currentPropertyImport.content_hash.slice(0, 12)}…` : "";
-  return <div className="property-workbench"><section className="subpanel property-import-box"><div className="subheading"><div><h3>Property evidence</h3><p className="muted-copy">Manual/file imports only. Original rows and transformations remain inspectable.</p></div><span className="mini-tag">{match ? `${match.candidate_count} candidates` : "Not resolved"}</span></div>{currentPropertyImport ? <div className="workflow-strip"><span><strong>Current Sarasota snapshot</strong><small>{currentPropertyImport.source_version} · {currentPropertyImport.normalized_row_count.toLocaleString()} accepted rows · {label(currentPropertyImport.status)} · {snapshotDetail}</small></span><button className="button button-light" disabled={busy || !onMatchCurrentProperty} onClick={() => void onMatchCurrentProperty?.()} type="button">{match ? "Refresh match" : "Match current snapshot"}</button></div> : <p className="field-note">No imported Sarasota property snapshot is available in this session. Upload a manually approved file to create a match run.</p>}{propertyProvider ? <><div className="inline-form"><label>Source version<input onChange={(event) => setSourceVersion(event.target.value)} value={sourceVersion} /></label>{official ? <label className="check-label"><input checked={authorized} onChange={(event) => setAuthorized(event.target.checked)} type="checkbox" /> Approved internal file attestation</label> : null}<label className="file-drop compact-drop"><Icon name="upload" size={15} /><span>Import property CSV/XLSX/ZIP<input accept=".csv,.xlsx,.zip,text/csv" disabled={busy || (official && !authorized)} onChange={(event) => { const file = event.target.files?.[0]; if (file && propertyProvider) void onUpload(file, propertyProvider.id, sourceVersion, authorized); event.currentTarget.value = ""; }} type="file" /></span></label></div><p className="field-note">{propertyProvider.limitations} No automated official retrieval is enabled.</p></> : <EmptyState title="Property provider unavailable" body="No property bulk-file provider is registered." />}</section>{match ? <><section className="subpanel"><div className="subheading"><h3>Candidate ranking</h3><span className="soft-label">{label(match.status)}</span></div>{match.abstention_reason ? <div className="abstention"><Icon name="warning" size={15} /><span>{match.abstention_reason}</span></div> : null}<div className="candidate-list">{match.candidates.map((candidate) => <article className={`candidate-card ${candidate.is_abstained ? "abstained" : ""}`} key={candidate.id}><div className="candidate-rank">{candidate.rank}</div><div className="candidate-main"><div className="candidate-title"><strong>{candidate.parcel.normalized_address}</strong><span>{label(candidate.classification)}</span></div><p>{candidate.parcel.owner_name ?? "Owner not available"} · Parcel {candidate.parcel.parcel_id}</p><small>Score {candidate.match_score.toFixed(3)}{candidate.score_margin === null ? "" : ` · margin ${candidate.score_margin.toFixed(3)}`} · {candidate.recommendation_status}</small><p className="candidate-explanation">{String(candidate.explanation.summary ?? "Evidence retained in the candidate record.")}</p><div className="candidate-actions"><button className="button button-light" disabled={busy || candidate.is_abstained} onClick={() => void onDecision("confirmed", candidate.id)} type="button">Confirm</button><button className="button button-light" disabled={busy} onClick={() => void onDecision("rejected", candidate.id)} type="button">Reject</button></div></div></article>)}</div></section>{match.current_human_decision ? <div className="decision-banner"><Icon name="check" size={16} /><span>Human decision: {label(String(match.current_human_decision.decision))} · {String(match.current_human_decision.reason ?? "")}</span></div> : null}</> : <EmptyState title="No property match run" body="Import an approved/manual property file to generate candidates. The system will abstain when evidence is insufficient." />}</div>;
+  const official = Boolean(
+    propertyProvider && !propertyProvider.id.startsWith("fixture."),
+  );
+  const snapshotDetail = currentPropertyImport
+    ? `${currentPropertyImport.acquisition_mode} · ${currentPropertyImport.authorization_basis ?? "authorization basis not recorded"} · hash ${currentPropertyImport.content_hash.slice(0, 12)}…`
+    : "";
+  const resolvingCurrentSnapshot = Boolean(
+    busy && currentPropertyImport && !match,
+  );
+  const siteMatched = match?.status === "site_matched";
+  const displayedCandidates = match
+    ? siteMatched
+      ? match.candidates.slice(0, 5)
+      : match.candidates
+    : [];
+  return (
+    <div className="property-workbench">
+      <section className="subpanel property-import-box">
+        <div className="subheading">
+          <div>
+            <h3>Property evidence</h3>
+            <p className="muted-copy">
+              Manual/file imports only. Original rows and transformations remain
+              inspectable.
+            </p>
+          </div>
+          <span className="mini-tag">
+            {match
+              ? `${match.candidate_count} candidates`
+              : resolvingCurrentSnapshot
+                ? "Resolving"
+                : "Not resolved"}
+          </span>
+        </div>
+        {currentPropertyImport ? (
+          <div className="workflow-strip">
+            <span>
+              <strong>Current property snapshot</strong>
+              <small>
+                {currentPropertyImport.source_version} ·{" "}
+                {currentPropertyImport.normalized_row_count.toLocaleString()}{" "}
+                accepted rows · {label(currentPropertyImport.status)} ·{" "}
+                {snapshotDetail}
+              </small>
+            </span>
+            <button
+              className="button button-light"
+              disabled={busy || !onMatchCurrentProperty}
+              onClick={() => void onMatchCurrentProperty?.()}
+              type="button"
+            >
+              {resolvingCurrentSnapshot
+                ? "Resolving current snapshot…"
+                : match
+                  ? "Refresh match"
+                  : "Match current snapshot"}
+            </button>
+          </div>
+        ) : (
+          <p className="field-note">
+            No imported property snapshot is available in this session. Upload a
+            manually approved file to create a match run.
+          </p>
+        )}
+        {propertyProvider ? (
+          <>
+            <div className="inline-form">
+              <label>
+                Source version
+                <input
+                  onChange={(event) => setSourceVersion(event.target.value)}
+                  value={sourceVersion}
+                />
+              </label>
+              {official ? (
+                <label className="check-label">
+                  <input
+                    checked={authorized}
+                    onChange={(event) => setAuthorized(event.target.checked)}
+                    type="checkbox"
+                  />{" "}
+                  Approved internal file attestation
+                </label>
+              ) : null}
+              <label className="file-drop compact-drop">
+                <Icon name="upload" size={15} />
+                <span>
+                  Import property CSV/XLSX/ZIP
+                  <input
+                    accept=".csv,.xlsx,.zip,text/csv"
+                    disabled={busy || (official && !authorized)}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file && propertyProvider)
+                        void onUpload(
+                          file,
+                          propertyProvider.id,
+                          sourceVersion,
+                          authorized,
+                        );
+                      event.currentTarget.value = "";
+                    }}
+                    type="file"
+                  />
+                </span>
+              </label>
+            </div>
+            <p className="field-note">
+              {propertyProvider.limitations} No automated official retrieval is
+              enabled.
+            </p>
+          </>
+        ) : (
+          <EmptyState
+            title="Property provider unavailable"
+            body="No property bulk-file provider is registered."
+          />
+        )}
+      </section>
+      {match ? (
+        <>
+          <section className="subpanel">
+            <div className="subheading">
+              <h3>Candidate ranking</h3>
+              <span className="soft-label">{label(match.status)}</span>
+            </div>
+            {siteMatched ? (
+              <div className="decision-banner">
+                <Icon name="check" size={16} />
+                <span>
+                  Building-level match: {match.candidate_count} unit parcels
+                  share this source address. No individual unit, owner, or LLC
+                  was selected; scoring uses shared site context only.
+                </span>
+              </div>
+            ) : null}
+            {match.abstention_reason ? (
+              <div className="abstention">
+                <Icon name="warning" size={15} />
+                <span>{match.abstention_reason}</span>
+              </div>
+            ) : null}
+            <div className="candidate-list">
+              {displayedCandidates.map((candidate) => (
+                <article
+                  className={`candidate-card ${candidate.is_abstained ? "abstained" : ""}`}
+                  key={candidate.id}
+                >
+                  <div className="candidate-rank">{candidate.rank}</div>
+                  <div className="candidate-main">
+                    <div className="candidate-title">
+                      <strong>{candidate.parcel.normalized_address}</strong>
+                      <span>{label(candidate.classification)}</span>
+                    </div>
+                    <p>
+                      {siteMatched
+                        ? `Representative unit parcel ${candidate.parcel.parcel_id}`
+                        : `${candidate.parcel.owner_name ?? "Owner not available"} · Parcel ${candidate.parcel.parcel_id}`}
+                    </p>
+                    <small>
+                      Score {candidate.match_score.toFixed(3)}
+                      {candidate.score_margin === null
+                        ? ""
+                        : ` · margin ${candidate.score_margin.toFixed(3)}`}{" "}
+                      · {candidate.recommendation_status}
+                    </small>
+                    <p className="candidate-explanation">
+                      {String(
+                        candidate.explanation.summary ??
+                          "Evidence retained in the candidate record.",
+                      )}
+                    </p>
+                    {siteMatched ? null : (
+                      <div className="candidate-actions">
+                        <button
+                          className="button button-light"
+                          disabled={busy || candidate.is_abstained}
+                          onClick={() =>
+                            void onDecision("confirmed", candidate.id)
+                          }
+                          type="button"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          className="button button-light"
+                          disabled={busy}
+                          onClick={() =>
+                            void onDecision("rejected", candidate.id)
+                          }
+                          type="button"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+            {siteMatched && match.candidate_count > displayedCandidates.length ? (
+              <p className="field-note">
+                Showing {displayedCandidates.length} representative unit parcels
+                of {match.candidate_count}; individual owner attribution remains
+                withheld.
+              </p>
+            ) : null}
+          </section>
+          {match.current_human_decision ? (
+            <div className="decision-banner">
+              <Icon name="check" size={16} />
+              <span>
+                Human decision:{" "}
+                {label(String(match.current_human_decision.decision))} ·{" "}
+                {String(match.current_human_decision.reason ?? "")}
+              </span>
+            </div>
+          ) : null}
+        </>
+      ) : resolvingCurrentSnapshot ? (
+        <EmptyState
+          title="Resolving property evidence"
+          body="Matching the current county property snapshot to the incident address. The evidence panel will update when the candidate run is complete."
+        />
+      ) : (
+        <EmptyState
+          title="No property match run"
+          body="Import an approved/manual property file to generate candidates. The system will abstain when evidence is insufficient."
+        />
+      )}
+    </div>
+  );
 }
 
-function ScorePanel({ score, busy, onScore }: { score: Opportunity | null; busy: boolean; onScore: () => Promise<void> }) { return <div className="score-workbench"><section className="subpanel"><div className="subheading"><div><h3>Opportunity ranking</h3><p className="muted-copy">Versioned evidence ranking only; this is not a probability or damage finding.</p></div><button className="button button-dark" disabled={busy} onClick={() => void onScore()} type="button">{score ? "Rescore" : "Generate score"}<Icon name="spark" size={14} /></button></div>{score ? <><div className="score-summary"><div><span className="score-number">{score.provisional_score === null ? "—" : score.provisional_score.toFixed(3)}</span><small>provisional rank</small></div><Fact label="Evidence tier" value={label(score.evidence_tier)} /><Fact label="Hard gate" value={label(score.hard_gate_status)} /><Fact label="Alert eligibility" value={score.alert_eligibility ? "Eligible after governance" : "Not eligible"} /></div>{score.abstention_reason ? <div className="abstention"><Icon name="warning" size={15} /><span>{score.abstention_reason}</span></div> : null}<p className="muted-copy">{String(score.explanation.summary ?? "Every component below retains its evidence and availability boundary.")}</p><div className="feature-list">{score.features.map((feature) => <div className="feature-row" key={feature.id}><span><strong>{label(feature.feature_name)}</strong><small>{feature.explanation}</small></span><b>{feature.value === null ? "Missing" : feature.value.toFixed(3)}</b></div>)}</div></> : <EmptyState title="No score run" body="Generate a versioned provisional ranking after reviewing the incident and property evidence." />}</section></div>; }
+function ScorePanel({
+  score,
+  scoreEligible,
+  scoreEligibilityReason,
+  busy,
+  onScore,
+}: {
+  score: Opportunity | null;
+  scoreEligible: boolean;
+  scoreEligibilityReason: string | null;
+  busy: boolean;
+  onScore: () => Promise<void>;
+}) {
+  return (
+    <div className="score-workbench">
+      <section className="subpanel">
+        <div className="subheading">
+          <div>
+            <h3>Opportunity ranking</h3>
+            <p className="muted-copy">
+              Versioned evidence ranking only; this is not a probability or
+              damage finding.
+            </p>
+          </div>
+          {scoreEligible ? (
+            <button
+              className="button button-dark"
+              disabled={busy}
+              onClick={() => void onScore()}
+              type="button"
+            >
+              {score ? "Rescore" : "Generate score"}
+              <Icon name="spark" size={14} />
+            </button>
+          ) : (
+            <span className="mini-tag amber">Fire events only</span>
+          )}
+        </div>
+        {score ? (
+          <>
+            <div className="score-summary">
+              <div>
+                <span className="score-number">
+                  {score.provisional_score === null
+                    ? "—"
+                    : score.provisional_score.toFixed(3)}
+                </span>
+                <small>provisional rank</small>
+              </div>
+              <Fact label="Evidence tier" value={label(score.evidence_tier)} />
+              <Fact label="Hard gate" value={label(score.hard_gate_status)} />
+              <Fact
+                label="Alert eligibility"
+                value={
+                  score.alert_eligibility
+                    ? "Eligible after governance"
+                    : "Not eligible"
+                }
+              />
+            </div>
+            {score.abstention_reason ? (
+              <div className="abstention">
+                <Icon name="warning" size={15} />
+                <span>{score.abstention_reason}</span>
+              </div>
+            ) : null}
+            <p className="muted-copy">
+              {String(
+                score.explanation.summary ??
+                  "Every component below retains its evidence and availability boundary.",
+              )}
+            </p>
+            <div className="feature-list">
+              {score.features.map((feature) => (
+                <div className="feature-row" key={feature.id}>
+                  <span>
+                    <strong>{label(feature.feature_name)}</strong>
+                    <small>{feature.explanation}</small>
+                  </span>
+                  <b>
+                    {feature.value === null
+                      ? "Missing"
+                      : feature.value.toFixed(3)}
+                  </b>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : scoreEligible ? (
+          <EmptyState
+            title="No score run"
+            body="Generate a versioned provisional ranking after reviewing the incident and property evidence."
+          />
+        ) : (
+          <div className="abstention">
+            <Icon name="warning" size={15} />
+            <span>
+              This incident is retained for evidence review but is not an
+              opportunity because it is not classified as an explicit fire event
+              {scoreEligibilityReason
+                ? ` (${scoreEligibilityReason.replace("non_fire_event:", "")})`
+                : ""}
+              .
+            </span>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
 
-function MapSurface({ incidents }: { incidents: Array<IncidentSummary | IncidentDetail> }) { const points = incidents.flatMap((item) => "observations" in item ? item.observations.filter((observation) => observation.latitude !== null && observation.longitude !== null) : []); const lats = points.map((point) => point.latitude as number); const lons = points.map((point) => point.longitude as number); const minLat = lats.length ? Math.min(...lats) : 0; const maxLat = lats.length ? Math.max(...lats) : 1; const minLon = lons.length ? Math.min(...lons) : 0; const maxLon = lons.length ? Math.max(...lons) : 1; const latSpan = Math.max(maxLat - minLat, 0.0001); const lonSpan = Math.max(maxLon - minLon, 0.0001); return <div className="map-empty"><div className="map-grid-lines" aria-hidden="true"><span /><span /><span /><span /></div>{points.length ? <div className="map-points">{points.map((point) => { const left = 12 + (((point.longitude as number) - minLon) / lonSpan) * 76; const top = 86 - (((point.latitude as number) - minLat) / latSpan) * 72; return <span className="map-point" key={point.id} style={{ left: `${left}%`, top: `${top}%` }} title={`${point.latitude}, ${point.longitude}`} />; })}</div> : null}<div className="map-empty-copy">{points.length ? <><div className="empty-mark"><Icon name="pulse" size={20} /></div><h3>{points.length} source coordinate{points.length === 1 ? "" : "s"}</h3><p>Only coordinates supplied by the source are shown. Positions are normalized within this view; no boundary, parcel, or damage inference is drawn.</p></> : <><div className="empty-mark"><Icon name="pulse" size={20} /></div><h3>No source coordinates available</h3><p>This map surface remains empty until an imported observation includes coordinates.</p></>}</div></div>; }
+function CoordinateEvidence({ detail }: { detail: IncidentDetail }) {
+  const points = detail.evidence_groups
+    .map((group) => group.representative)
+    .filter(
+      (observation) =>
+        observation.latitude !== null && observation.longitude !== null,
+    );
+  return (
+    <section className="subpanel coordinate-panel">
+      <div className="subheading">
+        <h3>Source coordinates</h3>
+        <span>{points.length} retained</span>
+      </div>
+      {points.length ? (
+        <div className="coordinate-list">
+          {points.slice(0, 5).map((point) => (
+            <div key={point.id}>
+              <span>{formatDate(point.event_time, true)}</span>
+              <strong>
+                {point.latitude?.toFixed(5)}, {point.longitude?.toFixed(5)}
+              </strong>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="muted-copy">
+          No coordinates were supplied by the source. No location, parcel,
+          boundary, or damage position is inferred.
+        </p>
+      )}
+    </section>
+  );
+}
 
-function Fact({ label: title, value }: { label: string; value: string }) { return <div className="fact"><span>{title}</span><strong>{value}</strong></div>; }
+function Fact({ label: title, value }: { label: string; value: string }) {
+  return (
+    <div className="fact">
+      <span>{title}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
 
-function OpportunityView({ opportunities, incidents, onSelect }: { opportunities: Opportunity[]; incidents: IncidentSummary[]; onSelect: (id: string) => void }) { const incidentMap = new Map(incidents.map((incident) => [incident.id, incident])); return <><div className="notice-card"><div className="notice-mark"><Icon name="spark" size={18} /></div><div><strong>Provisional research ranking</strong><p>Scores summarize available evidence. They are not probabilities, damage findings, coverage opinions, or contact recommendations.</p></div><span className="version-tag">Human review</span></div><section className="panel full-panel" aria-labelledby="opportunity-title"><div className="panel-heading"><div><p className="section-kicker">CURRENT SCORE RUNS</p><h2 id="opportunity-title">Opportunity pipeline</h2></div><span className="soft-label">{opportunities.length} loaded</span></div>{opportunities.length ? <div className="opportunity-list">{opportunities.map((opportunity) => { const incident = incidentMap.get(opportunity.incident_id); return <button className="opportunity-row" key={opportunity.id} onClick={() => onSelect(opportunity.incident_id)} type="button"><span className="opportunity-score">{opportunity.provisional_score === null ? "—" : opportunity.provisional_score.toFixed(3)}</span><span><strong>{incident?.canonical_location ?? "Location unresolved"}</strong><small>{label(opportunity.evidence_tier)} · {label(opportunity.hard_gate_status)} · {opportunity.alert_eligibility ? "eligible" : "not eligible"}</small></span><Icon name="arrow" size={15} /></button>; })}</div> : <EmptyState title="No opportunity score runs" body="Generate a provisional score from an incident workbench after reviewing property evidence. No count or probability is implied by this empty state." />}</section></>; }
+function OpportunityView({
+  opportunities,
+  incidents,
+  onSelect,
+}: {
+  opportunities: Opportunity[];
+  incidents: IncidentSummary[];
+  onSelect: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [tierFilter, setTierFilter] = useState("all");
+  const [eligibilityFilter, setEligibilityFilter] = useState("all");
+  const [sortOrder, setSortOrder] = useState<"score" | "newest">("score");
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+  const incidentMap = new Map(
+    incidents.map((incident) => [incident.id, incident]),
+  );
+  const tiers = [
+    ...new Set(opportunities.map((item) => item.evidence_tier)),
+  ].sort();
+  const filtered = opportunities
+    .filter((opportunity) => {
+      const incident = incidentMap.get(opportunity.incident_id);
+      const matchesQuery =
+        `${incident?.canonical_location ?? ""} ${incident?.classification_family ?? ""} ${incident?.provider_id ?? ""}`
+          .toLowerCase()
+          .includes(query.toLowerCase());
+      const matchesTier =
+        tierFilter === "all" || opportunity.evidence_tier === tierFilter;
+      const matchesEligibility =
+        eligibilityFilter === "all" ||
+        (eligibilityFilter === "eligible"
+          ? opportunity.alert_eligibility
+          : !opportunity.alert_eligibility);
+      return matchesQuery && matchesTier && matchesEligibility;
+    })
+    .sort((left, right) =>
+      sortOrder === "newest"
+        ? Date.parse(right.as_of) - Date.parse(left.as_of)
+        : (right.provisional_score ?? Number.NEGATIVE_INFINITY) -
+          (left.provisional_score ?? Number.NEGATIVE_INFINITY),
+    );
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const pageRows = filtered.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize,
+  );
+  useEffect(() => {
+    setPage(1);
+  }, [query, tierFilter, eligibilityFilter, sortOrder]);
+  return (
+    <>
+      <div className="notice-card">
+        <div className="notice-mark">
+          <Icon name="spark" size={18} />
+        </div>
+        <div>
+          <strong>Provisional research ranking</strong>
+          <p>
+            Rankings organize available evidence. They are not probabilities,
+            damage findings, coverage opinions, or contact recommendations.
+          </p>
+        </div>
+        <span className="version-tag">Human review</span>
+      </div>
+      <section className="panel full-panel" aria-labelledby="opportunity-title">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">CURRENT VERSIONED RUNS</p>
+            <h2 id="opportunity-title">Opportunity review queue</h2>
+            <p className="panel-note inline-note">
+              {filtered.length.toLocaleString()} matching · exact score remains
+              in incident detail
+            </p>
+          </div>
+        </div>
+        <div className="queue-filters opportunity-filters">
+          <label className="search-field">
+            <Icon name="search" size={14} />
+            <input
+              aria-label="Search opportunities"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search location, county, or type"
+              value={query}
+            />
+          </label>
+          <label>
+            <span>Evidence tier</span>
+            <select
+              aria-label="Filter opportunities by evidence tier"
+              onChange={(event) => setTierFilter(event.target.value)}
+              value={tierFilter}
+            >
+              <option value="all">All tiers</option>
+              {tiers.map((tier) => (
+                <option key={tier} value={tier}>
+                  {label(tier)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Alert posture</span>
+            <select
+              aria-label="Filter opportunities by alert posture"
+              onChange={(event) => setEligibilityFilter(event.target.value)}
+              value={eligibilityFilter}
+            >
+              <option value="all">All postures</option>
+              <option value="eligible">Eligible</option>
+              <option value="ineligible">Not eligible</option>
+            </select>
+          </label>
+          <label>
+            <span>Order</span>
+            <select
+              aria-label="Sort opportunities"
+              onChange={(event) =>
+                setSortOrder(event.target.value as "score" | "newest")
+              }
+              value={sortOrder}
+            >
+              <option value="score">Highest rank</option>
+              <option value="newest">Newest as-of</option>
+            </select>
+          </label>
+        </div>
+        {pageRows.length ? (
+          <div className="opportunity-table">
+            <div className="opportunity-header" aria-hidden="true">
+              <span>Rank</span>
+              <span>Incident</span>
+              <span>Evidence</span>
+              <span>Hard gate</span>
+              <span>Alert</span>
+              <span>As of</span>
+            </div>
+            {pageRows.map((opportunity) => {
+              const incident = incidentMap.get(opportunity.incident_id);
+              return (
+                <button
+                  className="opportunity-row"
+                  key={opportunity.id}
+                  onClick={() => onSelect(opportunity.incident_id)}
+                  type="button"
+                >
+                  <span
+                    className="opportunity-score"
+                    title={
+                      opportunity.provisional_score === null
+                        ? "No numeric rank"
+                        : `Exact provisional rank ${opportunity.provisional_score.toFixed(3)}`
+                    }
+                  >
+                    {opportunity.provisional_score === null
+                      ? "—"
+                      : opportunity.provisional_score.toFixed(1)}
+                  </span>
+                  <span className="opportunity-incident">
+                    <strong>
+                      {incident?.canonical_location ?? "Location unresolved"}
+                    </strong>
+                    <small>
+                      {providerShortLabel(incident?.provider_id)} ·{" "}
+                      {label(incident?.classification_family)}
+                    </small>
+                  </span>
+                  <span>{label(opportunity.evidence_tier)}</span>
+                  <span>{label(opportunity.hard_gate_status)}</span>
+                  <span
+                    className={
+                      opportunity.alert_eligibility
+                        ? "status-good"
+                        : "status-blocked"
+                    }
+                  >
+                    {opportunity.alert_eligibility
+                      ? "Eligible"
+                      : opportunity.abstention_reason
+                        ? label(opportunity.abstention_reason)
+                        : "Not eligible"}
+                  </span>
+                  <span className="mono-copy">
+                    {formatDate(opportunity.as_of, true)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState
+            title="No opportunities match this view"
+            body="Adjust the filters or generate a versioned rank from an eligible incident after reviewing its evidence."
+          />
+        )}
+        <Pagination
+          page={safePage}
+          pageCount={pageCount}
+          total={filtered.length}
+          pageSize={pageSize}
+          onPage={setPage}
+        />
+      </section>
+    </>
+  );
+}
 
-function WorkflowView({ alerts, busy, onGenerate, onAction, onImportClients }: { alerts: WorkflowAlert[]; busy: boolean; onGenerate: () => Promise<void>; onAction: (alertId: string, action: "acknowledge" | "snooze" | "resolve" | "suppress" | "revoke" | "escalate" | "unsuppress") => Promise<void>; onImportClients: (file: File) => Promise<void> }) { return <div className="workflow-grid"><section className="panel full-panel" aria-labelledby="workflow-title"><div className="panel-heading"><div><p className="section-kicker">INTERNAL REVIEW QUEUE</p><h2 id="workflow-title">Alerts and workflow</h2></div><div className="workflow-actions"><button className="button button-dark" disabled={busy} onClick={() => void onGenerate()} type="button"><Icon name="refresh" size={15} /> Scan eligible scores</button><label className="file-drop compact-drop"><Icon name="upload" size={15} /><span>Import existing-client CSV<input accept=".csv,text/csv" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportClients(file); event.currentTarget.value = ""; }} type="file" /></span></label></div></div><div className="workflow-boundary"><Icon name="shield" size={15} /><span>In-app review only. Suppression wins. No email, SMS, phone, owner contact, or consumer outreach is implemented.</span></div>{alerts.length ? <div className="alert-list">{alerts.map((alert) => <article className={`alert-card ${alert.status}`} key={alert.id}><div><span className="mini-tag">{label(alert.status)}</span><h3>{alert.title}</h3><p>{alert.summary}</p><small>{formatDate(alert.created_at, true)} · {label(alert.severity)} · score {String(alert.evidence_snapshot.provisional_score ?? "not recorded")}</small>{alert.suppression_reason ? <small>Suppression: {alert.suppression_reason}</small> : null}</div><div className="alert-actions">{alert.status === "open" || alert.status === "snoozed" ? <button className="button button-light" disabled={busy} onClick={() => void onAction(alert.id, "acknowledge")} type="button">Acknowledge</button> : null}{alert.status === "open" || alert.status === "acknowledged" ? <button className="button button-light" disabled={busy} onClick={() => void onAction(alert.id, "snooze")} type="button">Snooze 1 day</button> : null}{alert.status === "open" || alert.status === "acknowledged" || alert.status === "snoozed" ? <button className="button button-light" disabled={busy} onClick={() => void onAction(alert.id, "escalate")} type="button">Escalate</button> : null}{alert.status !== "suppressed" && alert.status !== "revoked" && alert.status !== "resolved" ? <button className="button button-light" disabled={busy} onClick={() => void onAction(alert.id, "suppress")} type="button">Suppress</button> : null}{alert.status === "acknowledged" || alert.status === "escalated" ? <button className="button button-light" disabled={busy} onClick={() => void onAction(alert.id, "resolve")} type="button">Resolve</button> : null}{alert.status === "suppressed" ? <button className="button button-light" disabled={busy} onClick={() => void onAction(alert.id, "unsuppress")} type="button">Re-open</button> : null}{alert.status !== "suppressed" && alert.status !== "revoked" && alert.status !== "resolved" ? <button className="button button-light" disabled={busy} onClick={() => void onAction(alert.id, "revoke")} type="button">Revoke</button> : null}</div></article>)}</div> : <EmptyState title="No internal alerts" body="Only explicitly eligible, authorized manual-source scores can create an alert. Fixture and unauthorized data remain review-only and produce no operational alert." />}</section></div>; }
+function WorkflowView({
+  alerts,
+  busy,
+  onGenerate,
+  onAction,
+  onImportClients,
+}: {
+  alerts: WorkflowAlert[];
+  busy: boolean;
+  onGenerate: () => Promise<void>;
+  onAction: (
+    alertId: string,
+    action:
+      | "acknowledge"
+      | "snooze"
+      | "resolve"
+      | "suppress"
+      | "revoke"
+      | "escalate"
+      | "unsuppress",
+  ) => Promise<void>;
+  onImportClients: (file: File) => Promise<void>;
+}) {
+  return (
+    <div className="workflow-grid">
+      <section className="panel full-panel" aria-labelledby="workflow-title">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">INTERNAL REVIEW QUEUE</p>
+            <h2 id="workflow-title">Alerts and workflow</h2>
+          </div>
+          <div className="workflow-actions">
+            <button
+              className="button button-dark"
+              disabled={busy}
+              onClick={() => void onGenerate()}
+              type="button"
+            >
+              <Icon name="refresh" size={15} /> Scan eligible scores
+            </button>
+            <label className="file-drop compact-drop">
+              <Icon name="upload" size={15} />
+              <span>
+                Import existing-client CSV
+                <input
+                  accept=".csv,text/csv"
+                  disabled={busy}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void onImportClients(file);
+                    event.currentTarget.value = "";
+                  }}
+                  type="file"
+                />
+              </span>
+            </label>
+          </div>
+        </div>
+        <div className="workflow-boundary">
+          <Icon name="shield" size={15} />
+          <span>
+            In-app review only. Suppression wins. No email, SMS, phone, owner
+            contact, or consumer outreach is implemented.
+          </span>
+        </div>
+        {alerts.length ? (
+          <div className="alert-list">
+            {alerts.map((alert) => (
+              <article className={`alert-card ${alert.status}`} key={alert.id}>
+                <div>
+                  <span className="mini-tag">{label(alert.status)}</span>
+                  <h3>{alert.title}</h3>
+                  <p>{alert.summary}</p>
+                  <small>
+                    {formatDate(alert.created_at, true)} ·{" "}
+                    {label(alert.severity)} · score{" "}
+                    {String(
+                      alert.evidence_snapshot.provisional_score ??
+                        "not recorded",
+                    )}
+                  </small>
+                  {alert.suppression_reason ? (
+                    <small>Suppression: {alert.suppression_reason}</small>
+                  ) : null}
+                </div>
+                <div className="alert-actions">
+                  {alert.status === "open" || alert.status === "snoozed" ? (
+                    <button
+                      className="button button-light"
+                      disabled={busy}
+                      onClick={() => void onAction(alert.id, "acknowledge")}
+                      type="button"
+                    >
+                      Acknowledge
+                    </button>
+                  ) : null}
+                  {alert.status === "open" ||
+                  alert.status === "acknowledged" ? (
+                    <button
+                      className="button button-light"
+                      disabled={busy}
+                      onClick={() => void onAction(alert.id, "snooze")}
+                      type="button"
+                    >
+                      Snooze 1 day
+                    </button>
+                  ) : null}
+                  {alert.status === "open" ||
+                  alert.status === "acknowledged" ||
+                  alert.status === "snoozed" ? (
+                    <button
+                      className="button button-light"
+                      disabled={busy}
+                      onClick={() => void onAction(alert.id, "escalate")}
+                      type="button"
+                    >
+                      Escalate
+                    </button>
+                  ) : null}
+                  {alert.status !== "suppressed" &&
+                  alert.status !== "revoked" &&
+                  alert.status !== "resolved" ? (
+                    <button
+                      className="button button-light"
+                      disabled={busy}
+                      onClick={() => void onAction(alert.id, "suppress")}
+                      type="button"
+                    >
+                      Suppress
+                    </button>
+                  ) : null}
+                  {alert.status === "acknowledged" ||
+                  alert.status === "escalated" ? (
+                    <button
+                      className="button button-light"
+                      disabled={busy}
+                      onClick={() => void onAction(alert.id, "resolve")}
+                      type="button"
+                    >
+                      Resolve
+                    </button>
+                  ) : null}
+                  {alert.status === "suppressed" ? (
+                    <button
+                      className="button button-light"
+                      disabled={busy}
+                      onClick={() => void onAction(alert.id, "unsuppress")}
+                      type="button"
+                    >
+                      Re-open
+                    </button>
+                  ) : null}
+                  {alert.status !== "suppressed" &&
+                  alert.status !== "revoked" &&
+                  alert.status !== "resolved" ? (
+                    <button
+                      className="button button-light"
+                      disabled={busy}
+                      onClick={() => void onAction(alert.id, "revoke")}
+                      type="button"
+                    >
+                      Revoke
+                    </button>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No internal alerts"
+            body="Only explicitly eligible, authorized manual-source scores can create an alert. Fixture and unauthorized data remain review-only and produce no operational alert."
+          />
+        )}
+      </section>
+    </div>
+  );
+}
 
-function AnalyticsView({ report, loading, onRefresh }: { report: AnalyticsReport | null; loading: boolean; onRefresh: () => Promise<void> }) {
+function AnalyticsView({
+  report,
+  loading,
+  onRefresh,
+}: {
+  report: AnalyticsReport | null;
+  loading: boolean;
+  onRefresh: () => Promise<void>;
+}) {
   function metricValue(metric: AnalyticsMetric) {
-    if (metric.value === null) return metric.status === "blocked" ? "Blocked" : "Distribution";
+    if (metric.value === null)
+      return metric.status === "blocked" ? "Blocked" : "Distribution";
     return `${(metric.value * 100).toFixed(1)}%`;
   }
-  return <div className="analytics-grid"><section className="notice-card"><div className="notice-mark"><Icon name="database" size={18} /></div><div><strong>Directional internal analytics</strong><p>Labels and events are manually recorded and reproducible from a saved manifest. These numbers are not real-world accuracy, calibration, damage, coverage, claim-validity, or conversion claims.</p></div><button className="button button-light" disabled={loading} onClick={() => void onRefresh()} type="button"><Icon name="refresh" size={15} /> Rebuild report</button></section>{loading ? <div className="loading-panel"><span className="spinner" /> Building the current evaluation manifest…</div> : report ? <><section className="panel full-panel" aria-labelledby="analytics-title"><div className="panel-heading"><div><p className="section-kicker">REPRODUCIBLE MANIFEST</p><h2 id="analytics-title">Outcomes and analytics</h2></div><span className="soft-label">{report.manifest.incident_ids.length} incidents · {report.manifest.label_ids.length} labels</span></div><div className="analytics-boundary"><span>As of {formatDate(report.manifest.as_of, true)}</span><span>Source modes: {report.manifest.source_acquisition_modes.length ? report.manifest.source_acquisition_modes.map(label).join(", ") : "none"}</span><span>Dispatch retrievals: {report.manifest.source_retrieval_ids.length} · property imports: {report.manifest.source_property_import_ids.length}</span><span>Claim status: {label(report.manifest.claim_status)}</span></div><div className="analytics-metrics">{report.metrics.map((metric) => <article className="analytics-card" key={metric.id}><div className="subheading"><h3>{label(metric.metric_name)}</h3><span className={`mini-tag ${metric.status === "available" ? "" : "amber"}`}>{label(metric.status)}</span></div><strong className="analytics-value">{metricValue(metric)}</strong><p className="muted-copy">{metric.numerator === null ? `${metric.denominator} denominator · distribution/readiness output` : `${metric.numerator} numerator · ${metric.denominator} denominator`}</p>{metric.warning ? <p className="field-note"><Icon name="warning" size={13} /> {metric.warning}</p> : null}{metric.metric_name === "model_lab_readiness" ? <p className="field-note">No learned model was trained. Real held-out labels, time-aware splits, leakage checks, and administrator approval remain required.</p> : null}</article>)}</div></section><section className="panel full-panel"><div className="subheading"><h3>Manifest evidence</h3><span className="mini-tag">Immutable references</span></div><p className="muted-copy">Manifest {report.manifest.id} fixes the incident, score-run, label, and outcome-event IDs used by this report. It also retains dispatch retrieval and property-import provenance, including provider, authorization, and snapshot references. Rebuilding later creates a new manifest; prior results are not overwritten.</p></section></> : <EmptyState title="No analytics report" body="The current report could not be generated. No metric is implied by this empty state." />}</div>;
+  return (
+    <div className="analytics-grid">
+      <section className="notice-card">
+        <div className="notice-mark">
+          <Icon name="database" size={18} />
+        </div>
+        <div>
+          <strong>Directional internal analytics</strong>
+          <p>
+            Labels and events are manually recorded and reproducible from a
+            saved manifest. These numbers are not real-world accuracy,
+            calibration, damage, coverage, claim-validity, or conversion claims.
+          </p>
+        </div>
+        <button
+          className="button button-light"
+          disabled={loading}
+          onClick={() => void onRefresh()}
+          type="button"
+        >
+          <Icon name="refresh" size={15} /> Rebuild report
+        </button>
+      </section>
+      {loading ? (
+        <div className="loading-panel">
+          <span className="spinner" /> Building the current evaluation manifest…
+        </div>
+      ) : report ? (
+        <>
+          <section
+            className="panel full-panel"
+            aria-labelledby="analytics-title"
+          >
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">REPRODUCIBLE MANIFEST</p>
+                <h2 id="analytics-title">Outcomes and analytics</h2>
+              </div>
+              <span className="soft-label">
+                {report.manifest.incident_ids.length} incidents ·{" "}
+                {report.manifest.label_ids.length} labels
+              </span>
+            </div>
+            <div className="analytics-boundary">
+              <span>As of {formatDate(report.manifest.as_of, true)}</span>
+              <span>
+                Source modes:{" "}
+                {report.manifest.source_acquisition_modes.length
+                  ? report.manifest.source_acquisition_modes
+                      .map(label)
+                      .join(", ")
+                  : "none"}
+              </span>
+              <span>
+                Dispatch retrievals:{" "}
+                {report.manifest.source_retrieval_ids.length} · property
+                imports: {report.manifest.source_property_import_ids.length}
+              </span>
+              <span>Claim status: {label(report.manifest.claim_status)}</span>
+            </div>
+            <div className="analytics-metrics">
+              {report.metrics.map((metric) => (
+                <article className="analytics-card" key={metric.id}>
+                  <div className="subheading">
+                    <h3>{label(metric.metric_name)}</h3>
+                    <span
+                      className={`mini-tag ${metric.status === "available" ? "" : "amber"}`}
+                    >
+                      {label(metric.status)}
+                    </span>
+                  </div>
+                  <strong className="analytics-value">
+                    {metricValue(metric)}
+                  </strong>
+                  <p className="muted-copy">
+                    {metric.numerator === null
+                      ? `${metric.denominator} denominator · distribution/readiness output`
+                      : `${metric.numerator} numerator · ${metric.denominator} denominator`}
+                  </p>
+                  {metric.warning ? (
+                    <p className="field-note">
+                      <Icon name="warning" size={13} /> {metric.warning}
+                    </p>
+                  ) : null}
+                  {metric.metric_name === "model_lab_readiness" ? (
+                    <p className="field-note">
+                      No learned model was trained. Real held-out labels,
+                      time-aware splits, leakage checks, and administrator
+                      approval remain required.
+                    </p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
+          <section className="panel full-panel">
+            <div className="subheading">
+              <h3>Manifest evidence</h3>
+              <span className="mini-tag">Immutable references</span>
+            </div>
+            <p className="muted-copy">
+              Manifest {report.manifest.id} fixes the incident, score-run,
+              label, and outcome-event IDs used by this report. It also retains
+              dispatch retrieval and property-import provenance, including
+              provider, authorization, and snapshot references. Rebuilding later
+              creates a new manifest; prior results are not overwritten.
+            </p>
+          </section>
+        </>
+      ) : (
+        <EmptyState
+          title="No analytics report"
+          body="The current report could not be generated. No metric is implied by this empty state."
+        />
+      )}
+    </div>
+  );
 }
 
-function LearningView({ policy, models, loading, onRefresh }: { policy: LearningPolicy | null; models: LearningModel[]; loading: boolean; onRefresh: () => Promise<void> }) {
-  return <div className="analytics-grid"><section className="notice-card"><div className="notice-mark"><Icon name="shield" size={18} /></div><div><strong>Governed learning posture</strong><p>Feature and label contracts, time-aware grouped splits, leakage checks, replay, drift, and rollback mechanics are available. Learned scoring is not active.</p></div><button className="button button-light" disabled={loading} onClick={() => void onRefresh()} type="button"><Icon name="refresh" size={15} /> Refresh posture</button></section>{loading ? <div className="loading-panel"><span className="spinner" /> Loading model-release posture…</div> : policy ? <><section className="panel full-panel" aria-labelledby="learning-title"><div className="panel-heading"><div><p className="section-kicker">MODEL RELEASE CONTROL</p><h2 id="learning-title">Model lab</h2></div><span className={`mini-tag ${policy.learned_model_active ? "" : "amber"}`}>{policy.learned_model_active ? "Active" : "Fallback"}</span></div><div className="learning-summary"><div className="learning-status"><span className="section-kicker">Current policy</span><strong>{label(policy.mode)}</strong><p>{policy.reason}</p></div><div className="fact"><span>Learned model</span><strong>{policy.learned_model_active ? policy.model_release_id ?? "Approved release" : "Not active"}</strong></div><div className="fact"><span>Probability display</span><strong>{policy.probability_display ? "Enabled" : "Off"}</strong></div></div><div className="learning-boundary"><Icon name="lock" size={15} /><span>Activation requires real approved outcomes, valid held-out improvement, calibration, improved top-alert precision, complete error analysis, and explicit administrator approval. Current releases cannot activate from this screen.</span></div></section><section className="panel full-panel"><div className="panel-heading"><div><p className="section-kicker">VERSIONED RELEASES</p><h2>Training history</h2></div><span className="soft-label">{models.length} release{models.length === 1 ? "" : "s"}</span></div>{models.length ? <div className="learning-model-list">{models.map((model) => <article className="learning-model" key={model.id}><div><strong>{model.model_version}</strong><small>{label(model.algorithm)} · dataset {model.dataset_snapshot_id}</small></div><span className={`mini-tag ${model.status === "champion" ? "" : "amber"}`}>{label(model.status)}</span><p>{model.inactive_reason ?? "Release remains subject to the explicit approval gate."}</p><small>Feature set {model.feature_set_id} · label set {model.label_set_id} · created {formatDate(model.created_at, true)}</small></article>)}</div> : <EmptyState title="No model releases" body="No learned release has been trained from the current evidence set. Rule-based fallback remains the only serving path." />}</section></> : <EmptyState title="Learning posture unavailable" body="The policy endpoint did not return a status. No learned model is assumed active." />}</div>;
+function LearningView({
+  policy,
+  models,
+  loading,
+  onRefresh,
+}: {
+  policy: LearningPolicy | null;
+  models: LearningModel[];
+  loading: boolean;
+  onRefresh: () => Promise<void>;
+}) {
+  return (
+    <div className="analytics-grid">
+      <section className="notice-card">
+        <div className="notice-mark">
+          <Icon name="shield" size={18} />
+        </div>
+        <div>
+          <strong>Governed learning posture</strong>
+          <p>
+            Feature and label contracts, time-aware grouped splits, leakage
+            checks, replay, drift, and rollback mechanics are available. Learned
+            scoring is not active.
+          </p>
+        </div>
+        <button
+          className="button button-light"
+          disabled={loading}
+          onClick={() => void onRefresh()}
+          type="button"
+        >
+          <Icon name="refresh" size={15} /> Refresh posture
+        </button>
+      </section>
+      {loading ? (
+        <div className="loading-panel">
+          <span className="spinner" /> Loading model-release posture…
+        </div>
+      ) : policy ? (
+        <>
+          <section
+            className="panel full-panel"
+            aria-labelledby="learning-title"
+          >
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">MODEL RELEASE CONTROL</p>
+                <h2 id="learning-title">Model lab</h2>
+              </div>
+              <span
+                className={`mini-tag ${policy.learned_model_active ? "" : "amber"}`}
+              >
+                {policy.learned_model_active ? "Active" : "Fallback"}
+              </span>
+            </div>
+            <div className="learning-summary">
+              <div className="learning-status">
+                <span className="section-kicker">Current policy</span>
+                <strong>{label(policy.mode)}</strong>
+                <p>{policy.reason}</p>
+              </div>
+              <div className="fact">
+                <span>Learned model</span>
+                <strong>
+                  {policy.learned_model_active
+                    ? (policy.model_release_id ?? "Approved release")
+                    : "Not active"}
+                </strong>
+              </div>
+              <div className="fact">
+                <span>Probability display</span>
+                <strong>
+                  {policy.probability_display ? "Enabled" : "Off"}
+                </strong>
+              </div>
+            </div>
+            <div className="learning-boundary">
+              <Icon name="lock" size={15} />
+              <span>
+                Activation requires real approved outcomes, valid held-out
+                improvement, calibration, improved top-alert precision, complete
+                error analysis, and explicit administrator approval. Current
+                releases cannot activate from this screen.
+              </span>
+            </div>
+          </section>
+          <section className="panel full-panel">
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">VERSIONED RELEASES</p>
+                <h2>Training history</h2>
+              </div>
+              <span className="soft-label">
+                {models.length} release{models.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            {models.length ? (
+              <div className="learning-model-list">
+                {models.map((model) => (
+                  <article className="learning-model" key={model.id}>
+                    <div>
+                      <strong>{model.model_version}</strong>
+                      <small>
+                        {label(model.algorithm)} · dataset{" "}
+                        {model.dataset_snapshot_id}
+                      </small>
+                    </div>
+                    <span
+                      className={`mini-tag ${model.status === "champion" ? "" : "amber"}`}
+                    >
+                      {label(model.status)}
+                    </span>
+                    <p>
+                      {model.inactive_reason ??
+                        "Release remains subject to the explicit approval gate."}
+                    </p>
+                    <small>
+                      Feature set {model.feature_set_id} · label set{" "}
+                      {model.label_set_id} · created{" "}
+                      {formatDate(model.created_at, true)}
+                    </small>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No model releases"
+                body="No learned release has been trained from the current evidence set. Rule-based fallback remains the only serving path."
+              />
+            )}
+          </section>
+        </>
+      ) : (
+        <EmptyState
+          title="Learning posture unavailable"
+          body="The policy endpoint did not return a status. No learned model is assumed active."
+        />
+      )}
+    </div>
+  );
 }
 
-function HealthView({ providers, health, retrievals, pollingStatus }: { providers: Provider[]; health: Record<string, ProviderHealth>; retrievals: ImportJob[]; pollingStatus: ReturnType<typeof livePollingStatus> }) { return <div className="health-grid"><section className="panel full-panel" aria-labelledby="health-title"><div className="panel-heading"><div><p className="section-kicker">INTEGRATION POSTURE</p><h2 id="health-title">Data health</h2></div><span className="soft-label">{retrievals.length} retrievals</span></div><div className="health-list">{providers.map((provider) => { const status = health[provider.id]; return <div className="health-row" key={provider.id}><span className={`health-dot ${status?.last_retrieval_status === "imported" ? "green" : "amber"}`} /><div><strong>{provider.name}</strong><small>{provider.data_type} · {provider.authorized_use_status}</small></div><span className={`health-status ${provider.id.includes("official") && pollingStatus.active ? "green" : "amber"}`}>{provider.id.includes("official") ? pollingStatus.label : status?.last_retrieval_status ?? "No retrieval"}</span></div>; })}</div></section><section className="panel health-note-panel"><div className="large-lock"><Icon name="lock" size={21} /></div><p className="section-kicker">PROVENANCE</p><h2>Every retrieval stays inspectable.</h2><p>Latest status, parser/schema metadata, replay state, errors, and acquisition mode remain available from this workspace.</p>{retrievals.slice(0, 5).map((retrieval) => <p className="health-retrieval" key={retrieval.retrieval_id}><strong>{formatDate(retrieval.created_at, true)}</strong> · {label(retrieval.status)} · {retrieval.normalized_record_count} rows · {label(retrieval.acquisition_mode)}</p>)}</section></div>; }
+function HealthView({
+  providers,
+  health,
+  retrievals,
+  pollingStatus,
+  dispatchProvider,
+  busy,
+  onDispatchUpload,
+}: {
+  providers: Provider[];
+  health: Record<string, ProviderHealth>;
+  retrievals: ImportJob[];
+  pollingStatus: ReturnType<typeof livePollingStatus>;
+  dispatchProvider?: Provider;
+  busy: boolean;
+  onDispatchUpload: (
+    file: File,
+    providerId: string,
+    authorized: boolean,
+  ) => Promise<void>;
+}) {
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
+  const pageCount = Math.max(1, Math.ceil(retrievals.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const displayedRetrievals = retrievals.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize,
+  );
+  return (
+    <div className="source-health-layout">
+      <SnapshotImporter
+        busy={busy}
+        provider={dispatchProvider}
+        onUpload={onDispatchUpload}
+      />
+      <section className="panel" aria-labelledby="health-title">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">INTEGRATION POSTURE</p>
+            <h2 id="health-title">Provider health</h2>
+          </div>
+          <span className={`mini-tag ${pollingStatus.active ? "" : "amber"}`}>
+            Runtime polling {pollingStatus.label}
+          </span>
+        </div>
+        <div className="health-list">
+          {providers.map((provider) => {
+            const status = health[provider.id];
+            const pending = status?.pending_processing_retrieval_count ?? 0;
+            const healthy = Boolean(
+              status &&
+              status.last_retrieval_status === "imported" &&
+              pending === 0 &&
+              !status.schema_drift_detected,
+            );
+            const statusText = pending
+              ? `${pending} retained retrieval${pending === 1 ? "" : "s"} awaiting processing`
+              : (status?.last_retrieval_status ??
+                (provider.data_type === "dispatch_snapshot" &&
+                pollingStatus.active
+                  ? pollingStatus.label
+                  : "No retrieval"));
+            return (
+              <div className="health-row" key={provider.id}>
+                <span className={`health-dot ${healthy ? "green" : "amber"}`} />
+                <div>
+                  <strong>{provider.name}</strong>
+                  <small>
+                    {label(provider.data_type)} ·{" "}
+                    {label(provider.authorized_use_status)}
+                    {pending
+                      ? ` · ${status?.pending_processing_observation_count ?? 0} accepted rows held`
+                      : ""}
+                  </small>
+                  {pending ? (
+                    <small>
+                      Oldest pending:{" "}
+                      {formatDate(
+                        status?.oldest_pending_processing_retrieval,
+                        true,
+                      )}
+                    </small>
+                  ) : null}
+                </div>
+                <span
+                  className={`health-status ${healthy ? "green" : "amber"}`}
+                >
+                  {label(statusText)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+      <section className="panel retrieval-ledger">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">PROVENANCE LEDGER</p>
+            <h2>Recent retrievals</h2>
+            <p className="panel-note inline-note">
+              Accepted/rejected counts, schema alerts, parser errors, and
+              acquisition mode remain inspectable.
+            </p>
+          </div>
+          <span className="soft-label">
+            {retrievals.length.toLocaleString()} total
+          </span>
+        </div>
+        {displayedRetrievals.length ? (
+          <div className="retrieval-list">
+            {displayedRetrievals.map((retrieval) => (
+              <article className="retrieval-row" key={retrieval.import_job_id}>
+                <div>
+                  <strong>{formatDate(retrieval.created_at, true)}</strong>
+                  <small className="mono-copy">
+                    {retrieval.provider_id} ·{" "}
+                    {retrieval.content_hash.slice(0, 12)}
+                  </small>
+                </div>
+                <span>{label(retrieval.status)}</span>
+                <span>
+                  {retrieval.normalized_record_count.toLocaleString()} accepted
+                </span>
+                <span>
+                  {retrieval.rejected_record_count.toLocaleString()} rejected
+                </span>
+                <span>{retrieval.schema_alert_count} schema alerts</span>
+                <span>
+                  {label(retrieval.acquisition_mode)}
+                  {retrieval.replayed ? " · replayed" : ""}
+                </span>
+                {retrieval.error ? (
+                  <p className="retrieval-error">{retrieval.error}</p>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No retrieval history"
+            body="No provider retrieval has been recorded in the current environment."
+          />
+        )}
+        <Pagination
+          page={safePage}
+          pageCount={pageCount}
+          total={retrievals.length}
+          pageSize={pageSize}
+          onPage={setPage}
+        />
+      </section>
+    </div>
+  );
+}
 
-function SettingsView({ user, onLogout, pollingStatus }: { user: { display_name: string; email: string; roles: string[] } | null; onLogout: () => void; pollingStatus: ReturnType<typeof livePollingStatus> }) { return <div className="settings-grid"><section className="panel full-panel" aria-labelledby="settings-title"><div className="panel-heading"><div><p className="section-kicker">CONTROLLED CONFIGURATION</p><h2 id="settings-title">Settings</h2></div><span className="mini-tag">Authenticated</span></div><div className="settings-list"><SettingRow label="Live Sarasota polling" detail="External approval and feature flag required" value={pollingStatus.label} /><SettingRow label="Automatic consumer outreach" detail="Not implemented by policy" value="Unavailable" /><SettingRow label="Probability display" detail="Only calibrated real-world models may use probability language" value="Off" /><SettingRow label="Human review" detail="Required for unresolved or contradictory evidence" value="Required" /><SettingRow label="Session identity" detail={user?.email ?? "Unknown"} value={user?.roles.join(", ") ?? "Unknown"} /></div></section><section className="panel settings-side"><div className="avatar large-avatar">{user?.display_name.slice(0, 2).toUpperCase() ?? "SA"}</div><p className="section-kicker">CURRENT SESSION</p><h2>{user?.display_name ?? "Reviewer"}</h2><p className="panel-note">Server-side role checks govern every import, correction, score, workflow, and audit action.</p><button className="button button-light" onClick={onLogout} type="button"><Icon name="logout" size={15} /> Sign out</button></section></div>; }
+function SettingsView({
+  user,
+  onLogout,
+  pollingStatus,
+}: {
+  user: { display_name: string; email: string; roles: string[] } | null;
+  onLogout: () => void;
+  pollingStatus: ReturnType<typeof livePollingStatus>;
+}) {
+  return (
+    <div className="settings-grid">
+      <section className="panel full-panel" aria-labelledby="settings-title">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">CONTROLLED CONFIGURATION</p>
+            <h2 id="settings-title">Settings</h2>
+          </div>
+          <span className="mini-tag">Authenticated</span>
+        </div>
+        <div className="settings-list">
+          <DesktopUpdater />
+          <SettingRow
+            label="Live source polling"
+            detail="External approval and feature flag required"
+            value={pollingStatus.label}
+          />
+          <SettingRow
+            label="Automatic consumer outreach"
+            detail="Not implemented by policy"
+            value="Unavailable"
+          />
+          <SettingRow
+            label="Probability display"
+            detail="Only calibrated real-world models may use probability language"
+            value="Off"
+          />
+          <SettingRow
+            label="Human review"
+            detail="Required for unresolved or contradictory evidence"
+            value="Required"
+          />
+          <SettingRow
+            label="Session identity"
+            detail={user?.email ?? "Unknown"}
+            value={user?.roles.join(", ") ?? "Unknown"}
+          />
+        </div>
+      </section>
+      <section className="panel settings-side">
+        <div className="avatar large-avatar">
+          {user?.display_name.slice(0, 2).toUpperCase() ?? "SA"}
+        </div>
+        <p className="section-kicker">CURRENT SESSION</p>
+        <h2>{user?.display_name ?? "Reviewer"}</h2>
+        <p className="panel-note">
+          Server-side role checks govern every import, correction, score,
+          workflow, and audit action.
+        </p>
+        <button
+          className="button button-light"
+          onClick={onLogout}
+          type="button"
+        >
+          <Icon name="logout" size={15} /> Sign out
+        </button>
+      </section>
+    </div>
+  );
+}
 
-function SettingRow({ label: title, detail, value }: { label: string; detail: string; value: string }) { return <div className="setting-row"><div><strong>{title}</strong><small>{detail}</small></div><span className="setting-value">{value}</span></div>; }
+function SettingRow({
+  label: title,
+  detail,
+  value,
+}: {
+  label: string;
+  detail: string;
+  value: string;
+}) {
+  return (
+    <div className="setting-row">
+      <div>
+        <strong>{title}</strong>
+        <small>{detail}</small>
+      </div>
+      <span className="setting-value">{value}</span>
+    </div>
+  );
+}

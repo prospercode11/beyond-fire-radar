@@ -1,0 +1,80 @@
+{
+  "name": "beyond-fire-radar-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows desktop shell and installer for Beyond Fire Radar",
+  "main": "main.cjs",
+  "author": "Beyond Adjusting",
+  "license": "UNLICENSED",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "prepare:web": "node scripts/prepare-web.cjs",
+    "build:backend": "pyinstaller --clean --noconfirm --distpath .build/backend --workpath .build/pyinstaller backend.spec",
+    "build:windows": "npm run test && npm run prepare:web && npm run build:backend && electron-builder --win nsis --x64 --publish never",
+    "release:windows": "npm run test && npm run prepare:web && npm run build:backend && electron-builder --win nsis --x64 --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
+  },
+  "devDependencies": {
+    "electron": "43.4.1",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.beyondadjusting.fire-radar",
+    "productName": "Beyond Fire Radar",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "runtime.cjs",
+      "assets/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": ".build/web",
+        "to": "web"
+      },
+      {
+        "from": ".build/backend",
+        "to": "backend"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "verifyUpdateCodeSignature": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Beyond Fire Radar",
+      "runAfterFinish": true,
+      "include": "installer.nsh",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "prospercode11",
+        "repo": "beyond-fire-radar",
+        "releaseType": "release"
+      }
+    ],
+    "artifactName": "Beyond-Fire-Radar-Setup-${version}.${ext}"
+  }
+}

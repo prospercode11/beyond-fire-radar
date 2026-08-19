@@ -65,6 +65,18 @@ def _fixture_incident(client: TestClient, headers: dict[str, str]) -> str:
     )["id"]
 
 
+def _replace_current_score(db, incident_id: str) -> None:
+    current = db.scalar(
+        select(OpportunityScoreRun).where(
+            OpportunityScoreRun.incident_id == incident_id,
+            OpportunityScoreRun.is_current.is_(True),
+        )
+    )
+    if current is not None:
+        current.is_current = False
+        db.flush()
+
+
 def test_assignment_notes_and_existing_client_import_are_audited(client: TestClient) -> None:
     headers = _auth(client)
     incident_id = _fixture_incident(client, headers)
@@ -123,6 +135,7 @@ def test_alert_actions_are_append_audited_and_notification_delivery_is_internal_
     incident_id = _fixture_incident(client, headers)
     db, generator = _session()
     try:
+        _replace_current_score(db, incident_id)
         score = OpportunityScoreRun(
             id=str(uuid4()),
             incident_id=incident_id,
@@ -219,6 +232,7 @@ def test_resolved_alert_notification_is_suppressed_not_delivered(client: TestCli
     incident_id = _fixture_incident(client, headers)
     db, generator = _session()
     try:
+        _replace_current_score(db, incident_id)
         score = OpportunityScoreRun(
             id=str(uuid4()),
             incident_id=incident_id,
@@ -272,6 +286,7 @@ def test_alert_state_guards_escalation_terminal_states_and_unsuppress_rechecks(
     incident_id = _fixture_incident(client, headers)
     db, generator = _session()
     try:
+        _replace_current_score(db, incident_id)
         score = OpportunityScoreRun(
             id=str(uuid4()),
             incident_id=incident_id,
@@ -347,6 +362,7 @@ def test_suppressed_alert_cannot_be_reopened_when_fixture_evidence_is_ineligible
     incident_id = _fixture_incident(client, headers)
     db, generator = _session()
     try:
+        _replace_current_score(db, incident_id)
         score = OpportunityScoreRun(
             id=str(uuid4()),
             incident_id=incident_id,

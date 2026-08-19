@@ -5,12 +5,17 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Optional
 from uuid import uuid4
 
-from sqlalchemy import func, select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.audit import record_audit
 from app.config import Settings
+from app.incidents.evidence import (
+    EVIDENCE_GROUPING_VERSION,
+    current_contradiction_count,
+    group_observations,
+)
 from app.incidents.linkage import (
     CLASSIFICATION_VERSION,
     LINKAGE_VERSION,
@@ -56,9 +61,11 @@ from app.providers.taxonomy import (
     RESIDENTIAL_STRUCTURE_FIRE,
     ROUTINE_FIRE_ALARM,
     SMOKE_INSIDE_STRUCTURE,
+    TAXONOMY_VERSION,
     TRAFFIC_CRASH_STRUCTURE,
     VEHICLE_STRUCTURAL_EXPOSURE,
     WORKING_FIRE,
+    classify_event,
 )
 
 PROCESSABLE_ACQUISITION_MODES = {"manual_snapshot", "synthetic_fixture", "live_poll"}
@@ -191,7 +198,9 @@ def _observations_for_links(
 def _classification(
     observations: list[DispatchObservation],
 ) -> tuple[str, float, str, dict[str, Any]]:
-    families = [item.normalized_event_family or "Unknown fire situation" for item in observations]
+    # Re-derive this field from preserved source wording so taxonomy fixes also correct
+    # already-retained observations on the next incident recomputation.
+    families = [classify_event(item.original_event_type) for item in observations]
     counts = Counter(families)
     family = max(counts, key=lambda value: (value in STRUCTURE_FAMILIES, counts[value], value))
     parser_confidence = sum(item.parser_confidence for item in observations) / max(
@@ -223,6 +232,17 @@ def _classification(
             "contradictory_family_mix": mixed_structure_and_alarm,
             "method": "source-faithful taxonomy aggregation; no working-fire inference",
         },
+    )
+
+
+def incident_needs_classification_refresh(db: Session, incident: CanonicalIncident) -> bool:
+    """Detect incidents persisted before the current source-taxonomy rules."""
+
+    observations = _observations_for_links(db, _current_links(db, incident.id))
+    return incident.classification_version != CLASSIFICATION_VERSION or any(
+        item.taxonomy_version != TAXONOMY_VERSION
+        or item.normalized_event_family != classify_event(item.original_event_type)
+        for item in observations
     )
 
 
@@ -476,11 +496,16 @@ def recompute_incident(
     if not observations:
         incident.contradiction_count = 0
         return 0
+    for item in observations:
+        item.normalized_event_family = classify_event(item.original_event_type)
+        item.taxonomy_version = TAXONOMY_VERSION
+    evidence_groups = group_observations(observations)
+    evidence_observations = [group.representative for group in evidence_groups]
     prior_family = incident.classification_family
     prior_confidence = incident.classification_confidence
     prior_band = incident.confidence_band
-    family, confidence, band, explanation = _classification(observations)
-    event_types = Counter(item.original_event_type for item in observations)
+    family, confidence, band, explanation = _classification(evidence_observations)
+    event_types = Counter(item.original_event_type for item in evidence_observations)
     incident.classification_family = family
     incident.classification_version = CLASSIFICATION_VERSION
     incident.classification_confidence = confidence
@@ -493,21 +518,21 @@ def recompute_incident(
     incident.first_seen_at = min(item.retrieved_at for item in observations)
     incident.last_seen_at = max(item.retrieved_at for item in observations)
     incident.canonical_location = Counter(
-        item.original_location for item in observations
+        item.original_location for item in evidence_observations
     ).most_common(1)[0][0]
     incident.canonical_grid = (
-        Counter(item.grid for item in observations if item.grid).most_common(1)[0][0]
-        if any(item.grid for item in observations)
+        Counter(item.grid for item in evidence_observations if item.grid).most_common(1)[0][0]
+        if any(item.grid for item in evidence_observations)
         else None
     )
     incident.canonical_agency = (
-        Counter(item.agency for item in observations if item.agency).most_common(1)[0][0]
-        if any(item.agency for item in observations)
+        Counter(item.agency for item in evidence_observations if item.agency).most_common(1)[0][0]
+        if any(item.agency for item in evidence_observations)
         else None
     )
     incident.canonical_station = (
-        Counter(item.station for item in observations if item.station).most_common(1)[0][0]
-        if any(item.station for item in observations)
+        Counter(item.station for item in evidence_observations if item.station).most_common(1)[0][0]
+        if any(item.station for item in evidence_observations)
         else None
     )
     for item in observations:
@@ -550,11 +575,10 @@ def recompute_incident(
                     )
                 )
 
-    contradiction_count = 0
-    families = {item.normalized_event_family for item in observations}
+    contradiction_count = current_contradiction_count(evidence_observations)
+    families = {item.normalized_event_family for item in evidence_observations}
     if len(families) > 1:
-        contradiction_count += 1
-        for item in observations:
+        for item in evidence_observations:
             _add_evidence(
                 db,
                 incident.id,
@@ -565,7 +589,7 @@ def recompute_incident(
                 {"families": sorted(families), "source_event_type": item.original_event_type},
             )
     seen_event_ids: dict[str, list[DispatchObservation]] = {}
-    for item in observations:
+    for item in evidence_observations:
         if item.source_event_id:
             seen_event_ids.setdefault(item.source_event_id, []).append(item)
     for source_event_id, items in seen_event_ids.items():
@@ -573,7 +597,6 @@ def recompute_incident(
             times = [_event_time(item) for item in items]
             locations = {normalize_location(item.original_location) for item in items}
             if max(times) - min(times) > timedelta(minutes=90) or len(locations) > 1:
-                contradiction_count += 1
                 for item in items:
                     _add_evidence(
                         db,
@@ -584,18 +607,9 @@ def recompute_incident(
                         "The source event identifier appears with incompatible time or location evidence.",
                         {"source_event_id": source_event_id, "locations": sorted(locations)},
                     )
-    persisted_contradictions = (
-        db.scalar(
-            select(func.count())
-            .select_from(IncidentEvidence)
-            .where(
-                IncidentEvidence.incident_id == incident.id,
-                IncidentEvidence.evidence_type == "contradictory",
-            )
-        )
-        or 0
-    )
-    contradiction_count = max(contradiction_count, persisted_contradictions)
+    # Contradictory evidence is append-only provenance. The current incident projection must
+    # be derived from current grouped observations so an older taxonomy or superseded source
+    # row cannot permanently poison an otherwise consistent incident.
     incident.contradiction_count = contradiction_count
     previous_state = incident.state
     next_state = _state_for(incident, family, confidence, contradiction_count)
@@ -660,6 +674,8 @@ def recompute_incident(
     incident.classification_explanation = explanation
     incident.current_explanation = {
         "source_observation_count": len(observations),
+        "evidence_group_count": len(evidence_groups),
+        "evidence_grouping_version": EVIDENCE_GROUPING_VERSION,
         "source_observation_ids": [item.id for item in observations],
         "source_row_ids": [item.raw_dispatch_row_id for item in observations],
         "classification": explanation,
@@ -720,6 +736,39 @@ def _retrieval_observations(db: Session, retrieval_id: str) -> list[DispatchObse
     )
 
 
+def unprocessed_retrievals(
+    db: Session, *, provider_id: Optional[str] = None
+) -> list[ProviderRetrieval]:
+    """Return imported snapshots whose accepted observations have no completed assembly run.
+
+    Dispatch ingestion deliberately commits the immutable raw snapshot before canonical
+    incident assembly. That preserves source evidence if assembly fails, but it also means
+    a later worker must be able to find and finish the retained retrieval. A run left in a
+    non-completed state is treated the same way: processing is idempotent and can resume
+    from its current observation links.
+    """
+
+    query = (
+        select(ProviderRetrieval)
+        .join(RawSnapshot, RawSnapshot.retrieval_id == ProviderRetrieval.id)
+        .outerjoin(
+            IncidentProcessingRun,
+            IncidentProcessingRun.retrieval_id == ProviderRetrieval.id,
+        )
+        .where(
+            ProviderRetrieval.normalized_record_count > 0,
+            or_(
+                IncidentProcessingRun.id.is_(None),
+                IncidentProcessingRun.status != "completed",
+            ),
+        )
+        .order_by(ProviderRetrieval.retrieved_at, ProviderRetrieval.id)
+    )
+    if provider_id:
+        query = query.where(ProviderRetrieval.provider_id == provider_id)
+    return list(db.scalars(query).all())
+
+
 def process_retrieval(
     db: Session,
     retrieval: ProviderRetrieval,
@@ -729,13 +778,15 @@ def process_retrieval(
     reason: str = "incremental_import",
     request_id: Optional[str] = None,
 ) -> IncidentProcessingRun:
-    if retrieval.acquisition_mode == "live_poll" and not live_polling_is_authorized(db, settings):
+    if retrieval.acquisition_mode == "live_poll" and not live_polling_is_authorized(
+        db, settings, retrieval.provider_id
+    ):
         raise PermissionError(
-            "live Sarasota polling is disabled or lacks the required approval basis; manually supplied snapshots and fixtures remain available"
+            f"live polling for {retrieval.provider_id} is disabled or lacks the required approval basis; manually supplied snapshots and fixtures remain available"
         )
     if retrieval.acquisition_mode not in PROCESSABLE_ACQUISITION_MODES:
         raise PermissionError(
-            "incident processing accepts manually supplied snapshots, fixtures, and approved live Sarasota retrievals only"
+            "incident processing accepts manually supplied snapshots, fixtures, and approved live retrievals only"
         )
     # Serialize incident assembly per provider. PostgreSQL takes a row lock; this write also
     # forces SQLite to acquire its database write lock before candidate search.
@@ -748,32 +799,77 @@ def process_retrieval(
     existing_run = db.scalar(
         select(IncidentProcessingRun).where(IncidentProcessingRun.retrieval_id == retrieval.id)
     )
-    if existing_run is not None:
+    if existing_run is not None and existing_run.status == "completed":
+        # A replayed snapshot can predate a taxonomy correction. Keep the original processing
+        # run immutable, but refresh the current incident projection from preserved source text.
+        observations = _retrieval_observations(db, retrieval.id)
+        incident_ids = db.scalars(
+            select(IncidentObservationLink.incident_id)
+            .where(
+                IncidentObservationLink.observation_id.in_([item.id for item in observations]),
+                IncidentObservationLink.is_current.is_(True),
+            )
+            .distinct()
+        ).all()
+        for incident_id in incident_ids:
+            incident = db.get(CanonicalIncident, incident_id)
+            if (
+                incident is not None
+                and incident.is_active
+                and incident_needs_classification_refresh(db, incident)
+            ):
+                rescore_incident(
+                    db,
+                    incident,
+                    actor_user_id=actor_user_id,
+                    request_id=request_id or f"incident-replay-refresh:{incident.id}",
+                )
         return existing_run
     observations = _retrieval_observations(db, retrieval.id)
-    run = IncidentProcessingRun(
-        id=str(uuid4()),
-        provider_id=retrieval.provider_id,
-        retrieval_id=retrieval.id,
-        acquisition_mode=retrieval.acquisition_mode,
-        reason=reason,
-        linkage_version=LINKAGE_VERSION,
-        classification_version=CLASSIFICATION_VERSION,
-        status="processing",
-        observation_count=len(observations),
-        actor_user_id=actor_user_id,
-    )
-    db.add(run)
-    try:
-        db.flush()
-    except IntegrityError:
-        db.rollback()
-        existing_run = db.scalar(
-            select(IncidentProcessingRun).where(IncidentProcessingRun.retrieval_id == retrieval.id)
+    if existing_run is None:
+        run = IncidentProcessingRun(
+            id=str(uuid4()),
+            provider_id=retrieval.provider_id,
+            retrieval_id=retrieval.id,
+            acquisition_mode=retrieval.acquisition_mode,
+            reason=reason,
+            linkage_version=LINKAGE_VERSION,
+            classification_version=CLASSIFICATION_VERSION,
+            status="processing",
+            observation_count=len(observations),
+            actor_user_id=actor_user_id,
         )
-        if existing_run is None:
-            raise
-        return existing_run
+        db.add(run)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            existing_run = db.scalar(
+                select(IncidentProcessingRun).where(
+                    IncidentProcessingRun.retrieval_id == retrieval.id
+                )
+            )
+            if existing_run is None:
+                raise
+            if existing_run.status == "completed":
+                return existing_run
+            run = existing_run
+    else:
+        # A prior worker can fail after persisting a processing row. Preserve that run's
+        # identity and audit trail, then finish any observations it did not reach.
+        run = existing_run
+        run.acquisition_mode = retrieval.acquisition_mode
+        run.reason = reason
+        run.linkage_version = LINKAGE_VERSION
+        run.classification_version = CLASSIFICATION_VERSION
+        run.status = "processing"
+        run.observation_count = len(observations)
+        run.actor_user_id = actor_user_id
+        run.linked_count = 0
+        run.new_incident_count = 0
+        run.review_count = 0
+        run.contradiction_count = 0
+        db.flush()
     new_count = 0
     linked_count = 0
     review_count = 0

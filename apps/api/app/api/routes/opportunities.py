@@ -22,6 +22,8 @@ from app.models import (
 from app.opportunities.scoring import (
     _current_override,
     create_scoring_version,
+    ensure_fire_score_runs,
+    incident_score_eligibility,
     record_override,
     rollback_score,
     score_incident,
@@ -107,12 +109,22 @@ def _response(db: DbSession, run: OpportunityScoreRun) -> OpportunityScoreRespon
 
 
 def _current_score(db: DbSession, incident_id: str) -> Optional[OpportunityScoreRun]:
-    return db.scalar(
+    run = db.scalar(
         select(OpportunityScoreRun).where(
             OpportunityScoreRun.incident_id == incident_id,
             OpportunityScoreRun.is_current.is_(True),
         )
     )
+    if run is None:
+        return None
+    incident = db.get(CanonicalIncident, incident_id)
+    if incident is None:
+        return None
+    # Current detail visibility follows the incident's current classification.
+    # The score run retains its historical as-of boundary for audit, but a later
+    # crash/alarm reclassification must remove the old score from the live view.
+    eligible, _, _ = incident_score_eligibility(db, incident)
+    return run if eligible else None
 
 
 @router.get("/api/v1/opportunities/scoring-versions", response_model=list[ScoringVersionResponse])
@@ -175,19 +187,48 @@ def list_opportunities(
     db: DbSession,
     evidence_tier: Optional[str] = Query(default=None),
     status_filter: Optional[str] = Query(default=None, alias="status"),
+    offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> list[OpportunityScoreResponse]:
     query = (
         select(OpportunityScoreRun)
         .where(OpportunityScoreRun.is_current.is_(True))
-        .order_by(OpportunityScoreRun.provisional_score.desc(), OpportunityScoreRun.created_at)
-        .limit(limit)
+        .order_by(
+            OpportunityScoreRun.provisional_score.desc(),
+            OpportunityScoreRun.created_at.desc(),
+            OpportunityScoreRun.id.desc(),
+        )
     )
     if evidence_tier:
         query = query.where(OpportunityScoreRun.evidence_tier == evidence_tier)
     if status_filter:
         query = query.where(OpportunityScoreRun.status == status_filter)
-    return [_response(db, item) for item in db.scalars(query).all()]
+    scoreable = []
+    for item in db.scalars(query).all():
+        incident = db.get(CanonicalIncident, item.incident_id)
+        if incident is None:
+            continue
+        # Do not expose a historical fire score after newer evidence makes the
+        # current incident non-fire. Historical runs remain inspectable by ID.
+        eligible, _, _ = incident_score_eligibility(db, incident)
+        if eligible:
+            scoreable.append(item)
+    return [_response(db, item) for item in scoreable[offset : offset + limit]]
+
+
+@router.post("/api/v1/opportunities/rescore-fire")
+def rescore_fire_opportunities(user: OpportunityReviewer, db: DbSession) -> dict[str, int]:
+    """Refresh every active fire and recompute only changed or incomplete runs.
+
+    The scorer still inspects every active incident, repairs stale taxonomy projections,
+    and rematches incidents whose property snapshot or observations changed. Unchanged
+    incidents are deliberately skipped so a refresh does not rewrite the large county
+    property projection and score history unnecessarily.
+    """
+
+    rescored = ensure_fire_score_runs(db, actor_user_id=user.id, force=False)
+    db.commit()
+    return {"rescored": rescored}
 
 
 @router.post(

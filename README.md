@@ -57,6 +57,14 @@ Run the required checks from the repository root:
 
 Individual commands are available through `python scripts/dev.py --help`. The CI workflow runs formatting checks, linting, type checking, unit/integration tests, the API smoke test, and the web production build. The Phase 10 dependency scan is `./scripts/dependency_audit.sh`; backup/restore and retention commands are documented in `docs/operations/`.
 
+## Windows desktop installer
+
+The Windows desktop package lives under `desktop/`. It installs the dashboard and a bundled FastAPI backend, starts at Windows sign-in, and keeps the background source pollers running when the dashboard window is closed. The SQLite alert database, raw snapshots, logs, and pre-update backups are stored under the current Windows user's AppData directory, outside the replaceable application installation directory.
+
+GitHub Actions builds the x64 NSIS installer from `.github/workflows/windows-installer.yml`. Pushing a version tag such as `v0.1.0` creates a GitHub Release containing the installer, update metadata, and blockmap. In the installed app, Settings provides Check, Download, and Restart to update actions. Immediately before installing an update, the desktop shell creates a consistent SQLite backup and retains the newest pre-update database backup.
+
+The current macOS development host cannot execute or visually validate the Windows installer. The Windows workflow therefore performs the packaged backend migration/readiness smoke test and validates the generated installer artifacts on a Windows runner. Until a Windows code-signing certificate is configured in the repository secrets, Windows may show an unknown-publisher/SmartScreen warning; this is a distribution limitation, not a successful signing claim.
+
 ## PostgreSQL/PostGIS and Redis
 
 The supported service definition is `infra/docker-compose.yml`. If the Docker Compose plugin is available:

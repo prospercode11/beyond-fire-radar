@@ -18,11 +18,29 @@ class Settings(BaseSettings):
     session_idle_ttl_hours: int = Field(default=8, ge=1, le=168)
     enable_live_sarasota_dispatch_polling: bool = False
     enable_sarasota_polling_worker: bool = False
+    enable_live_miami_dade_dispatch_polling: bool = False
+    enable_miami_dade_polling_worker: bool = False
+    enable_miami_dade_property_data: bool = False
+    enable_live_broward_dispatch_polling: bool = False
+    enable_broward_polling_worker: bool = False
+    enable_broward_property_data: bool = False
     enable_synthetic_fixture_providers: bool = False
     sarasota_dispatch_url: str = "https://dispatchreporting.scgov.net/Events?strAgencyID=All"
     sarasota_poll_interval_seconds: int = Field(default=900, ge=900, le=900)
     sarasota_poll_timeout_seconds: int = Field(default=20, ge=5, le=60)
     sarasota_live_authorization_basis: Optional[str] = None
+    miami_dade_dispatch_url: str = "https://www.miamidade.gov/firecalls/calls.html"
+    miami_dade_poll_interval_seconds: int = Field(default=900, ge=900, le=900)
+    miami_dade_poll_timeout_seconds: int = Field(default=20, ge=5, le=60)
+    miami_dade_live_authorization_basis: Optional[str] = None
+    broward_dispatch_url: str = "https://efirstalert.com/live-dispatch-for-broward-county/"
+    broward_poll_interval_seconds: int = Field(default=900, ge=900, le=900)
+    broward_poll_timeout_seconds: int = Field(default=20, ge=5, le=60)
+    broward_live_authorization_basis: Optional[str] = None
+    beyond_adjusting_anchor_latitude: float = Field(default=26.3683, ge=-90, le=90)
+    beyond_adjusting_anchor_longitude: float = Field(default=-80.1289, ge=-180, le=180)
+    beyond_adjusting_proximity_weight: float = Field(default=0.20, ge=0, le=1)
+    beyond_adjusting_proximity_radius_km: float = Field(default=250.0, gt=0, le=2000)
     enable_learned_model_serving: bool = False
     bootstrap_admin_email: str = "admin@example.com"
     bootstrap_admin_password: str = "change-me-in-development"

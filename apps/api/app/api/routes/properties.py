@@ -599,7 +599,22 @@ def reprocess_property_match(
     user: PropertyImporter,
     db: DbSession,
 ) -> PropertyMatchRunResponse:
-    return create_property_match(incident_id, request, user, db)
+    incident = db.get(CanonicalIncident, incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    try:
+        run = run_property_match(
+            db,
+            incident,
+            property_provider_id=request.property_provider_id,
+            property_import_id=request.property_import_id,
+            actor_user_id=user.id,
+            force=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    db.commit()
+    return _run_response(db, run)
 
 
 @match_router.post(

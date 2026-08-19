@@ -26,15 +26,17 @@ from app.models import (
     SchemaAlert,
 )
 from app.providers.parsing import (
+    BROWARD_PARSER_VERSION,
     EXPECTED_FIELDS,
+    MIAMI_DADE_PARSER_VERSION,
     PARSER_VERSION,
     REQUIRED_FIELDS,
-    SCHEMA_VERSION,
     ParseIssue,
     ParseResult,
     parse_snapshot,
 )
 from app.providers.storage import SnapshotStore, build_snapshot_store
+from app.providers.taxonomy import TAXONOMY_VERSION
 
 MAX_FAILURES_BEFORE_CIRCUIT_OPEN = 3
 
@@ -140,14 +142,18 @@ def _parser_version_id(provider_id: str, version: str) -> str:
 def seed_parser_versions(db: Session, *, include_synthetic_fixtures: bool = False) -> None:
     expected = list(EXPECTED_FIELDS)
     required = list(REQUIRED_FIELDS)
-    provider_ids = ["sarasota.official_dispatch"]
+    provider_versions = [
+        ("sarasota.official_dispatch", PARSER_VERSION),
+        ("miami_dade.fire_calls", MIAMI_DADE_PARSER_VERSION),
+        ("broward.efirstalert_dispatch", BROWARD_PARSER_VERSION),
+    ]
     if include_synthetic_fixtures:
-        provider_ids.append("fixture.sarasota.dispatch")
-    for provider_id in provider_ids:
+        provider_versions.append(("fixture.sarasota.dispatch", PARSER_VERSION))
+    for provider_id, parser_version in provider_versions:
         existing = db.scalar(
             select(ParserVersion).where(
                 ParserVersion.provider_id == provider_id,
-                ParserVersion.version == PARSER_VERSION,
+                ParserVersion.version == parser_version,
             )
         )
         if existing is None:
@@ -155,7 +161,7 @@ def seed_parser_versions(db: Session, *, include_synthetic_fixtures: bool = Fals
                 ParserVersion(
                     id=_parser_version_id(provider_id, PARSER_VERSION),
                     provider_id=provider_id,
-                    version=PARSER_VERSION,
+                    version=parser_version,
                     format="csv/html/json",
                     expected_fields=expected,
                     required_fields=required,
@@ -191,26 +197,35 @@ class DispatchIngestionService:
             )
         if acquisition_mode not in {"manual_snapshot", "synthetic_fixture", "live_poll"}:
             raise ValueError(f"unsupported acquisition mode: {acquisition_mode}")
-        if provider.id == "sarasota.official_dispatch":
+        if provider.data_type == "dispatch_snapshot" and not provider.id.startswith("fixture."):
             if acquisition_mode == "manual_snapshot" and not authorized_snapshot:
                 raise PermissionError(
-                    "manual Sarasota snapshots require an explicit authorized_snapshot attestation"
+                    f"manual {provider.name} snapshots require an explicit authorized_snapshot attestation"
                 )
             if acquisition_mode == "live_poll":
-                if not self.settings.enable_live_sarasota_dispatch_polling:
-                    raise PermissionError("live Sarasota polling is disabled by configuration")
+                enabled = (
+                    self.settings.enable_live_sarasota_dispatch_polling
+                    if provider.id == "sarasota.official_dispatch"
+                    else self.settings.enable_live_miami_dade_dispatch_polling
+                    if provider.id == "miami_dade.fire_calls"
+                    else self.settings.enable_live_broward_dispatch_polling
+                    if provider.id == "broward.efirstalert_dispatch"
+                    else False
+                )
+                if not enabled:
+                    raise PermissionError(f"live polling is disabled for {provider.id}")
                 if not authorization_basis:
                     raise PermissionError(
-                        "live Sarasota polling requires an approval or explicit local authorization basis"
+                        f"live polling for {provider.id} requires an approval or explicit local authorization basis"
                     )
         elif acquisition_mode == "live_poll":
-            raise ValueError(
-                "live polling is only supported for the official Sarasota dispatch provider"
-            )
+            raise ValueError("live polling is only supported for registered dispatch providers")
 
         storage_acquisition_mode = (
             "synthetic_fixture"
-            if provider.id == "fixture.sarasota.dispatch" and acquisition_mode == "manual_snapshot"
+            if provider.id.startswith("fixture.")
+            and provider.data_type == "dispatch_snapshot"
+            and acquisition_mode == "manual_snapshot"
             else acquisition_mode
         )
 
@@ -287,13 +302,14 @@ class DispatchIngestionService:
             status="parsing",
             retrieved_at=retrieved_at,
             snapshot_hash=content_hash,
-            schema_version=SCHEMA_VERSION,
-            parser_version=PARSER_VERSION,
+            schema_version=provider.schema_version,
+            parser_version=provider.parser_version,
             circuit_state="closed",
             acquisition_mode=storage_acquisition_mode,
             authorization_basis=(
                 "fixture"
-                if provider.id == "fixture.sarasota.dispatch"
+                if provider.id.startswith("fixture.")
+                and provider.data_type == "dispatch_snapshot"
                 and acquisition_mode == "manual_snapshot"
                 else authorization_basis
                 or ("manual_attestation" if acquisition_mode == "manual_snapshot" else None)
@@ -356,12 +372,18 @@ class DispatchIngestionService:
             return report_from_job(db, replay_job, replayed=True)
 
         try:
-            parsed = parse_snapshot(payload, content_type, filename)
+            parsed = parse_snapshot(
+                payload,
+                content_type,
+                filename,
+                parser_version=provider.parser_version,
+                retrieved_at=retrieved_at,
+            )
         except Exception as exc:
             parsed = ParseResult(
                 format="unknown",
-                parser_version=PARSER_VERSION,
-                schema_version=SCHEMA_VERSION,
+                parser_version=provider.parser_version,
+                schema_version=provider.schema_version,
                 issues=[],
             )
             parsed.issues.append(ParseIssue("parse_failed", str(exc)))
@@ -408,7 +430,11 @@ class DispatchIngestionService:
     def compare(
         self, db: Session, retrieval: ProviderRetrieval, parser_version: str
     ) -> ParseResult:
-        if parser_version != PARSER_VERSION:
+        if parser_version not in {
+            PARSER_VERSION,
+            MIAMI_DADE_PARSER_VERSION,
+            BROWARD_PARSER_VERSION,
+        }:
             raise ValueError(f"parser version {parser_version} is not registered")
         raw_snapshot = db.scalar(
             select(RawSnapshot).where(RawSnapshot.retrieval_id == retrieval.id)
@@ -420,6 +446,7 @@ class DispatchIngestionService:
             raw_snapshot.content_type,
             "comparison.snapshot",
             parser_version=parser_version,
+            retrieved_at=retrieval.retrieved_at,
         )
 
     def _persist_parse_result(
@@ -549,7 +576,7 @@ class DispatchIngestionService:
                     grid=row.grid,
                     parser_confidence=row.parser_confidence,
                     parser_version=parsed.parser_version,
-                    taxonomy_version="event-taxonomy.v1",
+                    taxonomy_version=TAXONOMY_VERSION,
                     raw_payload_reference=raw_reference,
                 )
             )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -8,12 +9,32 @@ from app.config import Settings
 from app.db import Base
 from app.models import DispatchObservation, ImportJob, Provider, RawDispatchRow, RawSnapshot
 from app.providers.ingestion import DispatchIngestionService
-from app.providers.parsing import PARSER_VERSION, parse_snapshot
+from app.providers.parsing import (
+    BROWARD_PARSER_VERSION,
+    MIAMI_DADE_PARSER_VERSION,
+    PARSER_VERSION,
+    parse_snapshot,
+)
 from app.providers.taxonomy import (
+    ELECTRICAL_HAZARD,
+    ELEVATOR_RESCUE,
+    EXTINGUISHED_FIRE,
+    GAS_ODOR,
+    GENERAL_FIRE,
     GENERAL_STRUCTURE_FIRE,
+    HAZMAT,
+    ILLEGAL_BURNING,
+    MARINE_RESCUE,
+    MEDICAL,
+    MIXED_FIRE_MEDICAL_CALL,
+    PUBLIC_SERVICE_FIRE,
     ROUTINE_FIRE_ALARM,
+    TRAFFIC_CRASH,
     TRAFFIC_CRASH_STRUCTURE,
     UNKNOWN_FIRE,
+    UNSPECIFIED_SOURCE_CALL,
+    VEHICLE_FIRE,
+    classify_event,
 )
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
@@ -79,6 +100,90 @@ def test_sarasota_csv_parser_handles_duplicate_event_headers() -> None:
     assert result.rows[1].original_event_type == "ALARM SOUNDING"
 
 
+def test_miami_dade_html_parser_reads_regional_active_call_tables() -> None:
+    result = parse_snapshot(
+        _read("sample_miami_dade_dispatch.html"),
+        "text/html",
+        "sample_miami_dade_dispatch.html",
+        parser_version=MIAMI_DADE_PARSER_VERSION,
+    )
+
+    assert result.parser_version == MIAMI_DADE_PARSER_VERSION
+    assert result.schema is not None
+    assert result.schema.missing_required_fields == []
+    assert result.issues == []
+    assert len(result.rows) == 2
+    assert result.rows[0].event_time is not None
+    assert result.rows[0].original_event_type == "FIRE"
+    assert result.rows[0].normalized_event_family == GENERAL_FIRE
+    assert result.rows[0].original_location == "26700 BLOCK & SW 8TH ST"
+    assert result.rows[0].location_precision == "approximate_public_call_location"
+    assert result.rows[0].raw_payload["units"] == "E37 M13"
+    assert result.rows[1].raw_payload["fc"] == "WF"
+
+
+def test_broward_parser_preserves_mixed_calls_without_guessing_from_units() -> None:
+    result = parse_snapshot(
+        _read("sample_broward_dispatch.html"),
+        "text/html",
+        "sample_broward_dispatch.html",
+        parser_version=BROWARD_PARSER_VERSION,
+    )
+    assert result.schema is not None
+    assert result.schema.missing_required_fields == []
+    assert result.issues == []
+    assert len(result.rows) == 5
+    assert result.rows[0].normalized_event_family == GENERAL_STRUCTURE_FIRE
+    assert result.rows[1].normalized_event_family == GENERAL_FIRE
+    assert result.rows[2].normalized_event_family == TRAFFIC_CRASH
+    assert result.rows[3].normalized_event_family == MIXED_FIRE_MEDICAL_CALL
+    assert result.rows[4].normalized_event_family == UNSPECIFIED_SOURCE_CALL
+    assert result.rows[3].source_event_id is not None
+    assert result.rows[3].source_event_id.startswith("broward-")
+    assert result.rows[0].latitude == 26.1224
+    assert result.rows[0].longitude == -80.1373
+    assert result.rows[3].raw_payload["units"] == "E4,R4"
+    assert classify_event("E") == UNSPECIFIED_SOURCE_CALL
+    assert classify_event("CHEST PAINS NON-TRAUMATIC") == MEDICAL
+    assert classify_event("BACK PAIN") == MEDICAL
+    assert classify_event("HEMORRHAGE OR LACERATION") == MEDICAL
+    assert classify_event("MENTAL ILLNESS") == MEDICAL
+    assert classify_event("CARDIAC/RESPIRATORY ARREST") == MEDICAL
+    assert classify_event("MEDICAL ALARM") == MEDICAL
+    assert classify_event("ASSAULT") == MEDICAL
+    assert classify_event("FIRE STRUCTURE") == GENERAL_STRUCTURE_FIRE
+    assert classify_event("FIRE AUTO") == VEHICLE_FIRE
+    assert classify_event("FIRE ALARM - RESIDENTIAL") == ROUTINE_FIRE_ALARM
+    assert classify_event("LOCK IN/LOCK OUT") == "Public service"
+    assert classify_event("AIRCRAFT EMERGENCY") == "Unknown source call"
+
+
+def test_broward_reparse_uses_retrieval_time_for_stable_ids() -> None:
+    payload = _read("sample_broward_dispatch.html")
+    timestamp = datetime(2026, 8, 3, 17, tzinfo=timezone.utc)
+    first = parse_snapshot(payload, "text/html", "broward.html", BROWARD_PARSER_VERSION, timestamp)
+    second = parse_snapshot(payload, "text/html", "broward.html", BROWARD_PARSER_VERSION, timestamp)
+    assert first.rows[0].source_event_id == second.rows[0].source_event_id
+    assert first.rows[0].event_time == second.rows[0].event_time
+
+
+def test_broward_snapshot_upload_preserves_third_party_source_provenance(
+    client: TestClient,
+) -> None:
+    response = _upload(
+        client,
+        _headers(client),
+        provider_id="broward.efirstalert_dispatch",
+        filename="broward.html",
+        content_type="text/html",
+        payload=_read("sample_broward_dispatch.html"),
+        key="broward-dispatch-1",
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["parser_version"] == BROWARD_PARSER_VERSION
+    assert response.json()["normalized_record_count"] == 5
+
+
 def test_json_event_datetime_satisfies_time_schema_requirement() -> None:
     result = parse_snapshot(
         b'{"records":[{"event_datetime":"2026-07-31T10:00:00Z","event_type":"STRUCTURE FIRE","location":"1 TEST WAY","source_event_id":"E-TEST"}]}',
@@ -100,6 +205,49 @@ def test_unknown_event_does_not_claim_fire_signal() -> None:
     )
 
     assert result.rows[0].normalized_event_family == UNKNOWN_FIRE
+
+
+def test_plain_traffic_crash_is_not_classified_as_unknown_fire() -> None:
+    result = parse_snapshot(
+        b"Date,Time,Event,Location\n07/31/26,10:00,TRAFFIC CRASH W/INJURY,1 TEST WAY\n",
+        "text/csv",
+        "traffic-crash.csv",
+    )
+
+    assert result.rows[0].normalized_event_family == TRAFFIC_CRASH
+
+
+def test_sarasota_event_vocabulary_is_source_faithful() -> None:
+    expected = {
+        "ELECTRICAL HAZARD/ARCING": ELECTRICAL_HAZARD,
+        "MARINE RESCUE": MARINE_RESCUE,
+        "ILLEGAL BURNING": ILLEGAL_BURNING,
+        "INVESTIGATE EXTINGUISHED FIRE": EXTINGUISHED_FIRE,
+        "ELEVATOR/ESCALATOR RESCUE": ELEVATOR_RESCUE,
+        "HAZMAT INCIDENT": HAZMAT,
+        "GAS ODOR INSIDE": GAS_ODOR,
+        "PUBLIC SERVICE FIRE": PUBLIC_SERVICE_FIRE,
+    }
+    for source_event_type, family in expected.items():
+        assert classify_event(source_event_type) == family
+
+
+def test_miami_dade_snapshot_upload_preserves_active_call_provenance(client: TestClient) -> None:
+    headers = _headers(client)
+    response = _upload(
+        client,
+        headers,
+        provider_id="miami_dade.fire_calls",
+        filename="miami-dade-active-calls.html",
+        content_type="text/html",
+        payload=_read("sample_miami_dade_dispatch.html"),
+        key="miami-dade-active-calls-1",
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "imported"
+    assert body["parser_version"] == MIAMI_DADE_PARSER_VERSION
+    assert body["normalized_record_count"] == 2
 
 
 def test_snapshot_upload_replay_and_raw_preservation(client: TestClient) -> None:

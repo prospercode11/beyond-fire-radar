@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from typing import Any, Optional
@@ -28,8 +29,8 @@ from app.properties.address import (
     normalize_address,
 )
 
-MATCHER_VERSION = "property-match.v1"
-FEATURE_VERSION = "property-match-features.v1"
+MATCHER_VERSION = "property-match.v5"
+FEATURE_VERSION = "property-match-features.v3"
 MATCH_THRESHOLD = 0.78
 EXACT_THRESHOLD = 0.92
 MARGIN_THRESHOLD = 0.10
@@ -121,7 +122,18 @@ def _incident_address(
         longitude = longitude if longitude is not None else observation.longitude
         precision = precision or observation.location_precision
     address = normalize_address(source, municipality=municipality, postal_code=postal_code)
-    if precision and precision not in {"", "unknown"}:
+    # Provider location precision is sometimes a source label such as
+    # `source_display_address`, not the normalized address precision. Preserve
+    # the parser's exact-address result for full street displays, while still
+    # allowing authoritative coarse labels to force abstention.
+    if precision and precision in {
+        "street_block",
+        "intersection",
+        "landmark",
+        "highway",
+        "approximate",
+        "unusable",
+    }:
         address = NormalizedAddress(
             original=address.original,
             normalized=address.normalized,
@@ -149,11 +161,28 @@ def _property_address(parcel: Parcel) -> NormalizedAddress:
     )
 
 
+def _house_number_matches(left: Optional[str], right: Optional[str]) -> bool:
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    for single, ranged in ((left, right), (right, left)):
+        single_match = re.fullmatch(r"(\d+)[A-Z]?", single)
+        range_match = re.fullmatch(r"(\d+)\s*-\s*(\d+)", ranged)
+        if single_match and range_match:
+            value = int(single_match.group(1))
+            lower, upper = sorted((int(range_match.group(1)), int(range_match.group(2))))
+            return lower <= value <= upper
+    return False
+
+
 def _address_core_matches(left: NormalizedAddress, right: NormalizedAddress) -> bool:
     """Match the address components both sources actually supplied."""
     if not left.house_number or not right.house_number:
         return False
-    if left.house_number != right.house_number or left.street_name != right.street_name:
+    if not _house_number_matches(left.house_number, right.house_number):
+        return False
+    if left.street_name != right.street_name:
         return False
     if left.street_type and right.street_type and left.street_type != right.street_type:
         return False
@@ -161,11 +190,7 @@ def _address_core_matches(left: NormalizedAddress, right: NormalizedAddress) -> 
         return False
     if left.street_suffix and right.street_suffix and left.street_suffix != right.street_suffix:
         return False
-    if left.unit and left.unit != right.unit:
-        return False
-    if left.municipality and right.municipality and left.municipality != right.municipality:
-        return False
-    if left.postal_code and right.postal_code and left.postal_code != right.postal_code:
+    if left.unit and right.unit and left.unit != right.unit:
         return False
     return True
 
@@ -180,60 +205,118 @@ def _candidate_pool(
     base = select(Parcel).where(Parcel.provider_id == provider_id, Parcel.is_active.is_(True))
     candidates: dict[str, Parcel] = {}
 
-    def add(query) -> None:
+    def add(query, *, ordered: bool = False) -> None:
+        if not ordered:
+            query = query.order_by(Parcel.parcel_id)
         for parcel in db.scalars(query.limit(500)).all():
             candidates[parcel.id] = parcel
 
     if address.normalized:
         add(base.where(Parcel.normalized_address == address.normalized))
-        add(
-            base.join(ParcelAddressAlias, ParcelAddressAlias.parcel_id == Parcel.id).where(
-                ParcelAddressAlias.normalized_address == address.normalized
-            )
+    if address.house_number and address.street_name:
+        core_address_query = base.where(
+            Parcel.house_number == address.house_number,
+            Parcel.street_name == address.street_name,
         )
+        if address.street_type:
+            core_address_query = core_address_query.where(Parcel.street_type == address.street_type)
+        add(core_address_query)
+    if address.normalized:
+        alias_parcel_ids = db.scalars(
+            select(ParcelAddressAlias.parcel_id)
+            .where(ParcelAddressAlias.normalized_address == address.normalized)
+            .limit(500)
+        ).all()
+        if alias_parcel_ids:
+            add(base.where(Parcel.id.in_(alias_parcel_ids)))
 
-    street_names = set()
-    if address.street_name:
-        street_names.add(address.street_name)
-    if address.precision == "intersection":
-        for token in address.street_tokens:
-            street_names.add(token.split()[0])
-    for street_name in street_names:
-        query = base.where(Parcel.street_name.ilike(f"%{street_name}%"))
-        if address.house_number and address.precision not in {"street_block", "intersection"}:
-            query = query.where(
-                or_(Parcel.house_number == address.house_number, Parcel.house_number.is_(None))
-            )
-        if address.municipality:
-            query = query.where(
-                or_(
-                    Parcel.municipality.ilike(address.municipality),
-                    Parcel.municipality.is_(None),
+    # Exact address and alias hits are the authoritative candidate path.  Do not follow an
+    # indexed exact match with broad ILIKE, municipality, or coordinate searches over a full
+    # county snapshot: that turns a one-parcel lookup into a slow, noisy scan.  The broader
+    # paths remain available when the source address has no exact property evidence.
+    if not candidates:
+        street_names = set()
+        if address.street_name:
+            street_names.add(address.street_name)
+        if address.precision == "intersection":
+            for token in address.street_tokens:
+                street_names.add(token.split()[0])
+        for street_name in street_names:
+            query = base.where(Parcel.street_name.ilike(f"%{street_name}%"))
+            if address.house_number and address.precision not in {"street_block", "intersection"}:
+                query = query.where(
+                    or_(
+                        Parcel.house_number == address.house_number,
+                        Parcel.house_number.like("%-%"),
+                        Parcel.house_number.is_(None),
+                    )
                 )
-            )
-        if address.postal_code:
-            query = query.where(
-                or_(Parcel.postal_code == address.postal_code, Parcel.postal_code.is_(None))
-            )
-        add(query)
+            if address.municipality:
+                query = query.where(
+                    or_(
+                        Parcel.municipality.ilike(address.municipality),
+                        Parcel.municipality.is_(None),
+                    )
+                )
+            if address.postal_code:
+                query = query.where(
+                    or_(Parcel.postal_code == address.postal_code, Parcel.postal_code.is_(None))
+                )
+            add(query)
 
-    if address.municipality or address.postal_code:
-        location_filters: list[Any] = []
-        if address.municipality:
-            location_filters.append(Parcel.municipality.ilike(address.municipality))
-        if address.postal_code:
-            location_filters.append(Parcel.postal_code == address.postal_code)
-        add(base.where(or_(*location_filters)))
+        # Recover rows imported under an older normalizer that damaged the stored street name
+        # (for example HOLLYWOOD BLVD in the city of Hollywood). The provider/house/location
+        # constraints keep this fallback bounded; candidates are re-normalized before scoring.
+        if address.house_number:
+            house_query = base.where(Parcel.house_number == address.house_number)
+            if address.municipality:
+                house_query = house_query.where(
+                    or_(
+                        Parcel.municipality.ilike(address.municipality),
+                        Parcel.municipality.is_(None),
+                    )
+                )
+            if address.postal_code:
+                house_query = house_query.where(
+                    or_(Parcel.postal_code == address.postal_code, Parcel.postal_code.is_(None))
+                )
+            add(house_query)
 
-    if latitude is not None and longitude is not None:
-        # A bounding-box query is deliberately only candidate generation; the scorer retains
-        # the exact haversine evidence and can abstain when the candidates remain close.
-        add(
-            base.where(
-                Parcel.latitude.between(latitude - 0.25, latitude + 0.25),
-                Parcel.longitude.between(longitude - 0.25, longitude + 0.25),
+        if latitude is not None and longitude is not None:
+            # A bounding-box query is deliberately only candidate generation; the scorer retains
+            # the exact haversine evidence and can abstain when candidates remain close. Nearest
+            # rows are inserted before broad municipality fallbacks so they survive the cap.
+            distance_squared = (Parcel.latitude - latitude) * (Parcel.latitude - latitude) + (
+                Parcel.longitude - longitude
+            ) * (Parcel.longitude - longitude)
+            add(
+                base.where(
+                    Parcel.latitude.between(latitude - 0.25, latitude + 0.25),
+                    Parcel.longitude.between(longitude - 0.25, longitude + 0.25),
+                ).order_by(distance_squared, Parcel.parcel_id),
+                ordered=True,
             )
-        )
+
+        if address.municipality or address.postal_code:
+            location_filters: list[Any] = []
+            if address.municipality:
+                location_filters.append(Parcel.municipality.ilike(address.municipality))
+            if address.postal_code:
+                location_filters.append(Parcel.postal_code == address.postal_code)
+            add(base.where(or_(*location_filters)))
+
+    # Imports produced by an older normalizer can have damaged stored components even though
+    # the immutable situs text is correct. Once reparsing that text yields exact address-core
+    # evidence, discard broad street/location fallbacks before the 500-row review cap. This
+    # prevents valid unit parcels from being crowded out by hundreds of unrelated parcels.
+    if address.precision in {"exact_address", "exact_address_with_unit"}:
+        exact_core_candidates = {
+            parcel_id: parcel
+            for parcel_id, parcel in candidates.items()
+            if _address_core_matches(address, _property_address(parcel))
+        }
+        if exact_core_candidates:
+            candidates = exact_core_candidates
 
     # Preserve condo/master relationships for human review even when only one side carries the
     # incident's situs address. Address aliases are queried before this expansion.
@@ -254,7 +337,7 @@ def _candidate_pool(
         # review pool. No candidate from this fallback can be auto-recommended because the
         # source precision gate below requires an exact address.
         add(base.order_by(Parcel.parcel_id))
-    return sorted(candidates.values(), key=lambda parcel: parcel.parcel_id)[:500]
+    return list(candidates.values())[:500]
 
 
 def _property_use_score(event_family: str, category: Optional[str]) -> Optional[float]:
@@ -292,7 +375,7 @@ def _score_candidate(
         ),
         "house_number_agreement": 1.0
         if incident_address.house_number
-        and incident_address.house_number == property_address.house_number
+        and _house_number_matches(incident_address.house_number, property_address.house_number)
         else 0.0
         if incident_address.house_number and property_address.house_number
         else None,
@@ -420,6 +503,7 @@ def run_property_match(
     property_provider_id: str,
     property_import_id: Optional[str] = None,
     actor_user_id: Optional[str] = None,
+    force: bool = False,
 ) -> IncidentPropertyMatchRun:
     current_import = (
         db.get(PropertyImport, property_import_id)
@@ -440,6 +524,24 @@ def run_property_match(
             "historical property imports cannot be used for new matches; select the current import"
         )
     incident_address, latitude, longitude, observation_ids = _incident_address(db, incident)
+    if not force:
+        recent_runs = db.scalars(
+            select(IncidentPropertyMatchRun)
+            .where(
+                IncidentPropertyMatchRun.incident_id == incident.id,
+                IncidentPropertyMatchRun.property_provider_id == property_provider_id,
+                IncidentPropertyMatchRun.property_import_id == current_import.id,
+                IncidentPropertyMatchRun.completed_at.is_not(None),
+            )
+            .order_by(IncidentPropertyMatchRun.created_at.desc())
+        ).all()
+        for existing_run in recent_runs:
+            if (
+                existing_run.matcher_version == MATCHER_VERSION
+                and existing_run.address_normalization_version == ADDRESS_NORMALIZATION_VERSION
+                and existing_run.source_observation_ids == observation_ids
+            ):
+                return existing_run
     run = IncidentPropertyMatchRun(
         id=str(uuid4()),
         incident_id=incident.id,
@@ -477,8 +579,7 @@ def run_property_match(
     same_location_candidates = [
         item
         for item in scored
-        if item[0].house_number == incident_address.house_number
-        and item[0].street_name == incident_address.street_name
+        if _address_core_matches(incident_address, _property_address(item[0]))
     ]
     unit_ambiguous = (
         not incident_address.unit
@@ -490,6 +591,18 @@ def run_property_match(
             ]
         )
         > 1
+    )
+    site_matched = (
+        unit_ambiguous
+        and source_precision == "exact_address"
+        and len(scored) > 1
+        and len(same_location_candidates) == len(scored)
+        and all(
+            parcel.unit
+            and parcel.master_parcel_id is None
+            and _address_core_matches(incident_address, _property_address(parcel))
+            for parcel, *_ in scored
+        )
     )
     low_precision = source_precision in {
         "street_block",
@@ -508,7 +621,11 @@ def run_property_match(
             candidate_contradictions.append(
                 {
                     "code": "unit_ambiguity",
-                    "summary": "multiple units or master/unit parcels share the incident address",
+                    "summary": (
+                        "the source names a multi-unit site but does not identify an individual unit"
+                        if site_matched
+                        else "multiple units or master/unit parcels share the incident address"
+                    ),
                 }
             )
         if low_precision:
@@ -560,7 +677,10 @@ def run_property_match(
             if score >= 0.5
             else "weak"
         )
-        if low_precision or unit_ambiguous or not scored:
+        if site_matched:
+            classification = "site_context"
+            recommendation = "site_context"
+        elif low_precision or unit_ambiguous or not scored:
             classification = "unresolved" if score < 0.5 else "ambiguous"
         explanation = {
             "summary": "Candidate ranked from versioned address, identifier, geographic, context, and data-quality evidence; this is not a probability.",
@@ -572,6 +692,9 @@ def run_property_match(
             if is_abstained and candidate_contradictions
             else None,
             "matcher_version": MATCHER_VERSION,
+            "match_scope": "site" if site_matched else "parcel",
+            "owner_attribution": "not_available" if site_matched else "candidate_parcel",
+            "site_candidate_count": len(scored) if site_matched else None,
         }
         candidate = IncidentPropertyCandidate(
             id=str(uuid4()),
@@ -611,6 +734,9 @@ def run_property_match(
     elif low_precision:
         run.status = "abstained"
         run.abstention_reason = "low_source_precision"
+    elif site_matched:
+        run.status = "site_matched"
+        run.abstention_reason = None
     elif unit_ambiguous:
         run.status = "abstained"
         run.abstention_reason = "unit_ambiguity"

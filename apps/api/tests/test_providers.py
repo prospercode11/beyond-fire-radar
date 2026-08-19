@@ -14,6 +14,13 @@ def test_provider_registry_exposes_fixture_and_disabled_live_provider(client: Te
     providers = {item["id"]: item for item in response.json()["providers"]}
     assert providers["fixture.sarasota.dispatch"]["authorized_use_status"] == "test_only"
     assert providers["sarasota.official_dispatch"]["enabled"] is False
+    assert providers["miami_dade.fire_calls"]["geographic_coverage"] == "Miami-Dade County, Florida"
+    assert (
+        providers["broward.efirstalert_dispatch"]["geographic_coverage"]
+        == "Broward County, Florida"
+    )
+    assert "not an official Broward" in providers["broward.efirstalert_dispatch"]["limitations"]
+    assert providers["miami_dade.property_appraiser"]["enabled"] is True
 
 
 def test_live_provider_fails_closed_when_flag_false() -> None:

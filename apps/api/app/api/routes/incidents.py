@@ -7,6 +7,11 @@ from sqlalchemy import func, select
 
 from app.config import get_settings
 from app.dependencies import CurrentUser, DbSession, IncidentEditor, IngestionUser, request_id
+from app.incidents.evidence import (
+    EVIDENCE_GROUPING_VERSION,
+    ObservationEvidenceGroup,
+    group_observations,
+)
 from app.incidents.service import (
     merge_incidents,
     process_retrieval,
@@ -26,7 +31,9 @@ from app.models import (
     RawDispatchRow,
     RawSnapshot,
 )
+from app.opportunities.scoring import ensure_fire_score_runs, incident_score_eligibility
 from app.schemas import (
+    EvidenceGroupResponse,
     IncidentDetailResponse,
     IncidentMergeRequest,
     IncidentProcessResponse,
@@ -131,6 +138,20 @@ def _observation_response(item: DispatchObservation) -> ObservationResponse:
     )
 
 
+def _evidence_group_response(group: ObservationEvidenceGroup) -> EvidenceGroupResponse:
+    representative = group.representative
+    return EvidenceGroupResponse(
+        id=representative.id,
+        representative=_observation_response(representative),
+        retained_observation_count=len(group.observations),
+        source_record_ids=group.source_record_ids,
+        source_capture_count=len(group.source_snapshot_ids),
+        first_retrieved_at=group.first_retrieved_at,
+        last_retrieved_at=group.last_retrieved_at,
+        grouping_version=EVIDENCE_GROUPING_VERSION,
+    )
+
+
 def _detail(db, incident: CanonicalIncident) -> IncidentDetailResponse:
     links = db.scalars(
         select(IncidentObservationLink)
@@ -188,6 +209,7 @@ def _detail(db, incident: CanonicalIncident) -> IncidentDetailResponse:
         else []
     )
     summary = _summary(db, incident)
+    score_eligible, score_eligibility_reason, _ = incident_score_eligibility(db, incident)
     return IncidentDetailResponse(
         **summary.model_dump(),
         canonical_event_type=incident.canonical_event_type,
@@ -199,6 +221,12 @@ def _detail(db, incident: CanonicalIncident) -> IncidentDetailResponse:
         source_retrieval_ids=sorted({item.id for item in source_retrievals}),
         observations=[
             _observation_response(by_id[item_id]) for item_id in observation_ids if item_id in by_id
+        ],
+        evidence_groups=[
+            _evidence_group_response(group)
+            for group in group_observations(
+                by_id[item_id] for item_id in observation_ids if item_id in by_id
+            )
         ],
         source_row_ids=[link.raw_dispatch_row_id for link in links],
         relationship_history=[
@@ -266,6 +294,8 @@ def _detail(db, incident: CanonicalIncident) -> IncidentDetailResponse:
             }
             for item in aliases
         ],
+        score_eligible=score_eligible,
+        score_eligibility_reason=score_eligibility_reason or None,
     )
 
 
@@ -296,6 +326,7 @@ def process_dispatch_retrieval(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    ensure_fire_score_runs(db, actor_user_id=user.id, provider_id=run.provider_id)
     db.commit()
     return _process_response(run)
 
@@ -307,11 +338,16 @@ def list_incidents(
     provider_id: Optional[str] = Query(default=None),
     state: Optional[str] = Query(default=None),
     include_inactive: bool = False,
+    offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> list[IncidentSummaryResponse]:
     query = (
         select(CanonicalIncident)
-        .order_by(CanonicalIncident.first_event_time, CanonicalIncident.id)
+        .order_by(
+            CanonicalIncident.first_event_time.desc().nulls_last(),
+            CanonicalIncident.id.desc(),
+        )
+        .offset(offset)
         .limit(limit)
     )
     if provider_id:

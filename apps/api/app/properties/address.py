@@ -4,7 +4,7 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Optional
 
-ADDRESS_NORMALIZATION_VERSION = "address-normalization.v1"
+ADDRESS_NORMALIZATION_VERSION = "address-normalization.v3"
 
 _DIRECTIONALS = {"N", "S", "E", "W", "NE", "NW", "SE", "SW"}
 _STREET_TYPES = {
@@ -73,11 +73,24 @@ def _postal(value: object) -> Optional[str]:
     cleaned = _clean(value)
     if not cleaned:
         return None
-    # A five-digit street number is common in Sarasota records. Postal codes are
-    # treated as the final token when parsing a complete address so a leading
-    # house number such as 11704 is never mistaken for a ZIP code.
-    match = re.search(r"\b(\d{5}(?:-\d{4})?)\b\s*$", cleaned)
-    return match.group(1) if match else None
+    # A five-digit street number is common in Sarasota records. Choose the last
+    # ZIP-looking token so a leading house number such as 11704 is never mistaken
+    # for a ZIP code, even when a geocoded display ends with `, USA`.
+    matches = re.findall(r"\b(\d{5}(?:-\d{4})?)\b", cleaned)
+    return matches[-1] if matches else None
+
+
+def _postal_from_address(value: object) -> Optional[str]:
+    """Extract a ZIP from a display address without mistaking a house number for one."""
+    text = "" if value is None else str(value)
+    matches = re.findall(r"\b\d{5}(?:-\d{4})?\b", _clean(text))
+    if len(matches) >= 2:
+        return matches[-1]
+    # A lone five-digit token in an unstructured display is normally the house
+    # number (for example, `11704 ALTAMONTE CT`), not a postal code.
+    if len(matches) == 1 and "," in text:
+        return matches[0]
+    return None
 
 
 def _unit_from_text(text: str) -> tuple[str, Optional[str]]:
@@ -104,8 +117,15 @@ def _street_parts(text: str) -> tuple[Optional[str], Optional[str], Optional[str
     street_type = None
     if tokens and tokens[-1] in _STREET_TYPES:
         street_type = _STREET_TYPES[tokens.pop()]
-    street_name = " ".join(tokens) or None
+    street_name = " ".join(_normalize_ordinal_token(token) for token in tokens) or None
     return prefix, street_name, street_type, suffix
+
+
+def _normalize_ordinal_token(token: str) -> str:
+    """Align display ordinals such as 33RD with tax-roll street names such as 33."""
+
+    match = re.fullmatch(r"(\d+)(?:ST|ND|RD|TH)", token)
+    return match.group(1) if match else token
 
 
 def _street_tokens(*parts: Optional[str]) -> tuple[str, ...]:
@@ -122,23 +142,39 @@ def normalize_address(
     original = "" if address is None else str(address).strip()
     text = _clean(original)
     city = _clean(municipality) or None
-    zip_code = _postal(postal_code) or _postal(text)
+    zip_code = _postal(postal_code) or _postal_from_address(original)
     warnings: list[str] = []
+    # Remove a trailing country suffix from geocoded displays, but do not strip
+    # the `US` route prefix from addresses such as `US 41 N near airport`.
+    text = re.sub(r"(?:,|\s)\s*(?:USA|US|UNITED STATES(?: OF AMERICA)?)\s*$", "", text).strip()
     if city is None and "," in original:
         comma_parts = [_clean(part) for part in original.split(",") if _clean(part)]
         if len(comma_parts) >= 2:
-            tail = comma_parts[-1]
-            tail_without_zip = re.sub(r"\b\d{5}(?:-\d{4})?\b", " ", tail).strip()
-            tail_without_state = re.sub(r"\b(?:FL|FLORIDA)\b", " ", tail_without_zip).strip()
-            if tail_without_state:
-                city = tail_without_state
-            elif len(comma_parts) >= 3:
-                city = comma_parts[-2]
+            city_parts = list(comma_parts)
+            if city_parts and city_parts[-1] in {
+                "USA",
+                "US",
+                "UNITED STATES",
+                "UNITED STATES OF AMERICA",
+            }:
+                city_parts.pop()
+            while city_parts:
+                tail = city_parts[-1]
+                tail_without_zip = re.sub(r"\b\d{5}(?:-\d{4})?\b", " ", tail).strip()
+                tail_without_state = re.sub(r"\b(?:FL|FLORIDA)\b", " ", tail_without_zip).strip()
+                if tail_without_state:
+                    city = tail_without_state
+                    break
+                city_parts.pop()
+            if city is None and len(city_parts) >= 2:
+                city = city_parts[-1]
     text = re.sub(r"\b(?:FL|FLORIDA)\b", " ", text).strip()
     if zip_code:
         text = re.sub(rf"\b{re.escape(zip_code)}\b", " ", text).strip()
     if city:
-        text = re.sub(rf"\b{re.escape(city)}\b", " ", text).strip()
+        # Remove only the trailing municipality segment. Removing every occurrence corrupts
+        # addresses whose street shares the city name, such as HOLLYWOOD BLVD in Hollywood.
+        text = re.sub(rf"\s+{re.escape(city)}\s*$", "", text).strip()
     text, parsed_unit = _unit_from_text(text)
     selected_unit = _clean(unit) or parsed_unit
     if selected_unit:
@@ -207,8 +243,6 @@ def normalize_address(
     house_match = re.match(r"^(\d+[A-Z]?)(?:\s+|$)(.*)$", text)
     house_number = house_match.group(1) if house_match else None
     street_text = house_match.group(2) if house_match else text
-    if city:
-        street_text = re.sub(rf"\b{re.escape(city)}\b", " ", street_text).strip()
     street_tokens_before_type = street_text.split()
     route_like = (
         re.match(

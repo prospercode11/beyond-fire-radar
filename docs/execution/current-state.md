@@ -1,7 +1,7 @@
 # Current state
 
-Updated: 2026-08-03 after Sarasota property/incident issue-fix verification
-Scope: Phase 0 through Phase 10 v1 closure plus local Sarasota polling runtime activation
+Updated: 2026-08-19 after the authenticated dashboard accessibility redesign
+Scope: Phase 0 through Phase 10 v1 closure plus multi-county local development integration and the incident-command-ledger web redesign
 
 ## Implemented
 
@@ -11,13 +11,13 @@ Scope: Phase 0 through Phase 10 v1 closure plus local Sarasota polling runtime a
 - SQLAlchemy models and migration-owned schema through `0022_raw_purge_pending_state`.
 - SQLite local mode; PostgreSQL/PostGIS and Redis service definition.
 - One-time configured admin bootstrap, password verification, expiring bearer sessions, and server-side role checks.
-- Provider registry for a synthetic fixture and a fail-closed Sarasota live provider.
-- Authorized manual Sarasota dispatch snapshot ingestion for CSV, HTML, and JSON.
+- Provider registry for a synthetic fixture, Sarasota live provider, Miami-Dade active-calls provider, Broward eFirstAlert dispatch provider, and authorized Miami-Dade parcel GIS provider.
+- Authorized manual Sarasota, Miami-Dade, and Broward dispatch snapshot ingestion for CSV, HTML, and JSON.
 - Immutable content-addressed raw snapshot storage, raw dispatch rows, normalized observations, and audit events.
 - Versioned parser/schema metadata, source-faithful taxonomy, parser comparison, schema alerts, import errors, replay protection, and provider health.
 - Next.js web shell under `apps/web`.
 - Unit/integration/API smoke verification scripts.
-- Canonical Sarasota incident assembly with deterministic identifiers, conservative explainable probabilistic linkage, confidence/review bands, and anti-transitive-overmerge checks.
+- Multi-county canonical incident assembly with deterministic identifiers, conservative explainable probabilistic linkage, confidence/review bands, and anti-transitive-overmerge checks.
 - Versioned incident classification, incident timelines, guarded incident state transitions, incremental processing, and explicit rescore hooks.
 - Contradictory-evidence preservation, immutable raw/source-row relationships, provenance-bearing incident detail, and explanations for matches and kept-separate candidates.
 - Audited manual incident merge and split controls with source-row preservation.
@@ -35,7 +35,7 @@ Scope: Phase 0 through Phase 10 v1 closure plus local Sarasota polling runtime a
 - Authenticated score/list/rescore/override/version-registration/rollback APIs and leakage-controlled evaluation contracts are implemented. Synthetic and unauthorized/live retrievals cannot produce operational alerts; production/staging Sarasota live polling remains disabled while local development uses the separately recorded guarded activation.
 - Phase 5 focused scoring/evaluation tests, migration round-trip, verification contract, application/API checks, independent Luna review, and corrected high-severity findings are recorded in the Phase 5 review/handoff.
 - Phase 6 internal dashboard foundation provides Command Center, Incident Stream, Opportunities, Data Health, Settings, source posture, review queue, incident map, evidence workbench, and property-context surfaces.
-- Phase 6 browser states distinguish loading, API-unavailable, and empty data; manual Sarasota provenance, freshness limits, uncertainty, human-review requirements, and the current guarded polling state remain visible.
+- Phase 6 browser states distinguish loading, API-unavailable, and empty data; county-neutral manual provenance, freshness limits, uncertainty, human-review requirements, and the current guarded polling state remain visible.
 - Phase 6 responsive navigation and keyboard-accessible controls were inspected at desktop and 390×844 mobile dimensions; the dashboard has no horizontal overflow and does not fabricate records, map points, property candidates, or scores.
 - Phase 6 verification, handoff, and independent Luna review are recorded in the Phase 6 execution/review/handoff documents.
 - Phase 7 migrations `0012_internal_workflow` and `0013_workflow_state_guards` add internal alerts, in-app notification jobs, terminal-safe escalation, assignment history, append-only notes, and internal existing-client CSV import rows with idempotency, provenance, suppression, and audit controls.
@@ -55,10 +55,12 @@ Scope: Phase 0 through Phase 10 v1 closure plus local Sarasota polling runtime a
 - The 2026-08-03 issue-fix pass surfaces the current Sarasota property snapshot in the incident workbench, exposes acquisition/authorization/hash provenance, and provides an explicit current-snapshot match action that rescored the selected incident.
 - Property matching treats database-naive effective timestamps as UTC, parses five-digit street numbers without mistaking them for ZIP codes, and compares the address components actually supplied by dispatch/property records. New matches reject non-current imports rather than claiming historical data while using current parcel projections.
 - Incident linkage keeps exact same-time duplicate Sarasota rows together, allows same-agency-case updates through the existing 90-minute window, and treats alternate/missing-case reused source event identifiers more than five minutes apart as a deterministic non-match even at the same address. `scripts/repair_sarasota_duplicate_incidents.py` provides a dry-run-first, exact-key, audited repair path for legacy duplicates.
+- Fire-only opportunity scoring is now enforced by `opportunity-scoring.v6`: explicit fire classifications can score, while crashes, smoke investigations, routine alarms, unknown calls, medical calls, and other non-fire dispatch activity stay in the incident/evidence stream but never appear in the opportunity queue. `scripts/reconcile_fire_only_scores.py` performs the audited current-row reconciliation without deleting prior score history.
+- The event taxonomy is now `event-taxonomy.v5`; exact source wording `FIRE` is classified as `General fire` and is eligible for fire-only scoring without being promoted to a structure-fire finding, while generic crash wording such as `TRAFFIC CRASH W/INJURY` is classified as `Traffic crash` from the preserved source text. Sarasota source vocabulary such as `MARINE RESCUE`, `ELECTRICAL HAZARD/ARCING`, `GAS ODOR INSIDE`, `HAZMAT INCIDENT`, and `ELEVATOR/ESCALATOR RESCUE` now receives explicit non-fire families instead of falling through to `Unknown fire situation`; `ILLEGAL BURNING`, `INVESTIGATE EXTINGUISHED FIRE`, and `PUBLIC SERVICE FIRE` receive explicit fire families. The active projection refresh found zero remaining unknown-family incidents. SQLite local mode uses WAL, a busy timeout, and transient-contention responses; the web client retries safe GET/authentication reads and reports the failing endpoint.
 
 ## Explicitly not implemented
 
-Production/staging Sarasota live polling without a recorded `LegalApproval`, automated GIS/permit collection, cross-source deduplication, learned-model activation, empirical accuracy claims, live GIS/map data, managed production deployment activation, production SSO/MFA, email/SMS/phone notifications, and consumer outreach.
+Production/staging Sarasota or Miami-Dade live polling without a recorded `LegalApproval`, automated GIS/permit collection, cross-source deduplication, learned-model activation, empirical accuracy claims, live GIS/map data, managed production deployment activation, production SSO/MFA, exact paid Miami-Dade Property Appraiser bulk sales/building-detail CSV import without authorized account credits, email/SMS/phone notifications, and consumer outreach.
 
 ## Environment evidence
 
@@ -68,11 +70,99 @@ The external-source approval gate remains intact. Manual snapshots and fixtures 
 
 ## 2026-08-03 issue-fix verification
 
-- The selected real Sarasota incident `11704 ALTAMONTE CT` is one active canonical incident with 39 retained observations after the audited legacy merge and replay.
-- Current manual property import `sarasota.scpa.2026-08-02` is visible in the workbench with 324,924 accepted rows, `manual_snapshot`/`manual_attestation`, and the content hash prefix. Matching returns parcel `0758080452` at score `1.000`; the current score is `55.990`, `Review Only`, and `fit_evidence_missing`. The hard gate is intentional because Beyond Adjusting fit evidence is not available.
+- The selected real Sarasota incident `11704 ALTAMONTE CT` is one active canonical incident with 39 retained observations after the audited legacy merge and replay. Those rows collapse to one unchanged source evidence event, observed across 13 captures and represented by 3 source record IDs; raw rows remain retained for audit.
+- Current manual property import `sarasota.scpa.2026-08-02` is visible in the workbench with 324,924 accepted rows, `manual_snapshot`/`manual_attestation`, and the content hash prefix. Matching returns parcel `0758080452` at score `1.000`; the current score is `84.210`, `Elite`, `opportunity-scoring.v4`, with the versioned `beyondadjusting-fit.v2` service-profile evidence. Sarasota property code `0100` supplies the residential segment, and the fire-related source classification supplies the published claim-type match. The score remains a provisional research ranking and is not coverage, claim-validity, damage, or hiring evidence; alert eligibility remains false in the current source posture. Prior `opportunity-scoring.v1`, `opportunity-scoring.v2`, and `opportunity-scoring.v3` scores remain immutable history.
+- All nine current opportunity rows were rescored under `opportunity-scoring.v4`; unresolved property matches and negative-source records remain abstained/suppressed, while only the exact matched `11704 ALTAMONTE CT` record received an available fit signal. Current v4 explanations record one evidence group and retain all raw source-observation IDs.
+- Incident classification is now `incident-classification.v2`: unchanged repeated captures are grouped for classification, evidence display, and map coordinates, while retained-row relationships and provenance remain available.
 - The latest Sarasota replay processed 61 observations with `linked_count=61`, `new_incident_count=0`, `review_count=0`, and `contradiction_count=0`; active incidents remained at 84 and the target remained one incident.
 - The duplicate maintenance scan reports no remaining exact duplicate groups after five audited merges. The merge records and source rows remain inspectable in the local database.
 - Verification passed: `./scripts/verify.sh` (67 tests, Ruff, mypy, web lint/build), `./.venv/bin/python scripts/dev.py migrate`, `./.venv/bin/python scripts/dev.py api-smoke`, isolated `scripts/e2e_acceptance.py`, browser verification on `http://127.0.0.1:3021/`, and the Sarasota replay/API check. The host still lacks runnable PostgreSQL/PostGIS/Redis services.
+
+## 2026-08-03 Miami-Dade expansion
+
+- The implementation plan, source boundary, import sequence, and acceptance gates are recorded in `docs/execution/miami-dade-expansion-plan.md`.
+- Miami-Dade Fire Rescue active calls now have a versioned HTML parser/provider (`miami_dade.dispatch.v1`) that handles all regional tables, preserves `RCVD`, `FC`, incident type, approximate address, and units, and records the active-call limitations. The official page is available through a manual authorized snapshot path; live polling remains feature-flagged and approval-gated.
+- The official Miami-Dade active-calls page was imported locally on 2026-08-03 as retrieval `f4303909-653a-4bb7-8479-5f58d8a0fc27`: 32 normalized rows, 0 rejected rows, 30 new canonical incidents, 2 deterministic links, and 7 review/contradiction signals. The browser stream displayed a Miami incident with `manual_snapshot` provenance, and the opportunity queue/detail click opened successfully.
+- The public Miami-Dade parcel GIS layer was downloaded through the official ArcGIS service with 596,108 feature rows and 538,341 normalized parcel rows. The resumable manifest is `data/raw-snapshots/miami_dade_property_gis/manifest.json`; the normalized CSV and raw GeoJSON-bearing NDJSON preserve the source URL, layer, per-feature hashes, geometry, centroid, parcel/address/owner/building fields, and final content hashes.
+- The public Miami-Dade GIS snapshot was imported into `miami_dade.property_appraiser` on 2026-08-03 as property import `61cbc402-5b18-429c-b71b-73ae0b1ce764`: 538,326 accepted parcel/source rows, 538,326 building projections, 15 duplicate-parcel rejections, `manual_snapshot`/`manual_attestation`, and content hash `755b98a3c5a66f969e6f2a87cbd5d900d293769b32e03f897b59971fdf77cf0f`. The import uses `miami_dade.property.v1` and `miami_dade.property.schema.v1`; the source file and geometry remain in the local raw-snapshot store.
+- Exact Miami-Dade Property Appraiser parcel/sales/building-detail bulk CSVs were not downloaded because the official bulk library requires an account and paid credits. No access-control or payment bypass was used. An authorized file can be imported later through the registered manual property provider.
+- Opportunity scoring is now `opportunity-scoring.v6` with `beyondadjusting-fit.v3` and the fire-only gate. Twenty percent of the fit component is a public Boca Raton geographic anchor using a 250 km radius; distance reduces that component, missing coordinates abstain from the distance adjustment, and the explanation explicitly says this is not a private residence lookup. The v4 and v5 scoring histories remain immutable.
+- The UI now presents the product as multi-county, exposes both Sarasota and Miami-Dade dispatch sources, keeps source provenance grouped rather than repeating unchanged captures, and selects the matching county property provider inside incident detail.
+- Verification passed after the expansion: `./scripts/verify.sh` (71 tests, Ruff, mypy, web lint/build), `./.venv/bin/python scripts/dev.py migrate`, `./.venv/bin/python scripts/dev.py api-smoke`, direct Miami upload/process acceptance, and browser acceptance on `http://127.0.0.1:3021/`. The local API verification runtime used live-polling-disabled overrides to avoid concurrent SQLite writer locks; manual imports remain available.
+
+## 2026-08-03 fire-only and transient-error repair
+
+- The live database reconciliation found 15 current score runs: 14 non-fire rows were deactivated with `opportunity.score_deactivated` audit events, and the remaining fire run was rescored under `opportunity-scoring.v6` with a current provisional score of `82.49`. Historical score rows and raw observations remain retained.
+- `501 N RIVER RD` now has source-faithful classification `Traffic crash`, `score_eligible=false`, and `non_fire_event:Traffic crash`; its prior v4 score is no longer current or listed. `2721 22ND ST` remains `Smoke investigation` and is likewise excluded from scoring/opportunities.
+- Verification passed after the repair: `./scripts/verify.sh` (73 tests, Ruff, mypy, web lint/build), `./.venv/bin/python scripts/dev.py migrate`, and `./.venv/bin/python scripts/dev.py api-smoke`. Direct live endpoint checks returned one current opportunity on v6, exposed the crash scoreability fields, and returned healthy API status after the worker completed its startup poll.
+
+## 2026-08-03 taxonomy replay refresh
+
+- A follow-up audit found active incidents whose persisted classification projection still reflected the pre-`event-taxonomy.v2` parser, including incidents with no score run. The audited reconciliation re-derived each current incident from preserved `original_event_type` text, retained all raw observations, and left historical processing/score records immutable.
+- `S WASHINGTON BLVD / ALDERMAN ST` now has 28 retained observations, canonical event type `TRAFFIC CRASH W/INJURY`, classification `Traffic crash`, `incident-classification.v2`, and `score_eligible=false`. The active incident scan now reports zero stale classification projections.
+- Replayed snapshots now refresh current incident projections when their source-derived family disagrees with the persisted label; the original processing run remains an immutable historical record. Regression coverage was added for this replay path.
+- Verification passed after the refresh: `./scripts/verify.sh` (74 tests, Ruff, mypy, web lint/build), `./.venv/bin/python scripts/dev.py migrate`, and `./.venv/bin/python scripts/dev.py api-smoke`. Direct checks returned the corrected screenshot incident, one current v6 opportunity, web HTTP 200, and `/healthz` HTTP 200.
+
+## 2026-08-03 explicit-fire and property-match repair
+
+- `26700 BLOCK & SW 8TH ST` preserves source wording `FIRE`, now projects to `General fire` under `event-taxonomy.v4`, is `score_eligible=true`, and has a current `opportunity-scoring.v6` row. The score remains abstained with `property_match_missing` until parcel evidence is resolved; it is nevertheless retained in the fire-only opportunity queue. No structure-fire or damage conclusion is inferred from the generic source label.
+- The audited reconciliation updated 202 active incident projections to the current taxonomy version, created eight missing current fire score rows, and retained prior score/history records. It did not delete raw observations or historical scores.
+- Property matching is now independent from opportunity scoring in the web workbench. A current property snapshot can generate a visible match run for a non-scoreable incident such as a routine alarm; only explicit fire classifications can generate opportunity scores or appear in the opportunity queue. `1415 BRENNER PARK DR` now has a current Sarasota match run with one candidate and `matched` status.
+- Verification passed after the repair: `./scripts/verify.sh` (75 tests, Ruff, mypy, web lint/build), `./.venv/bin/python scripts/dev.py migrate`, and `./.venv/bin/python scripts/dev.py api-smoke`. Live checks returned Miami `General fire`, `score_eligible=true`, current v6 score/opportunity presence, a Sarasota property match, and healthy API/web endpoints.
+
+## 2026-08-03 source-vocabulary classification refresh
+
+- The v5 taxonomy classifies every currently active preserved event type from Sarasota and Miami-Dade into a source-supported family; the active scan reports zero `Unknown fire situation` projections. Rescue, hazmat, gas-odor, electrical-hazard, alarm, crash, medical, and public-service activity remains visible as evidence but is excluded from fire-only Opportunities unless the source wording explicitly identifies a fire.
+- `1700 KEN THOMPSON PKWY` now renders `Marine rescue` from the retained `MARINE RESCUE` evidence, while `1845 18TH ST` renders `Electrical hazard` from `ELECTRICAL HAZARD/ARCING`. Explicit fire wording such as `PUBLIC SERVICE FIRE`, `ILLEGAL BURNING`, and `INVESTIGATE EXTINGUISHED FIRE` is classified into fire families and remains eligible for the normal property-evidence gate.
+- The audited v5 refresh recomputed active incident projections without deleting source rows or historical score/processing records. Existing current score rows remain fire-gated, and current list/detail visibility still re-evaluates the incident's current family.
+
+## 2026-08-03 refresh and Broward property backfill
+
+- Broward's Florida DOR 2025P NAL/SDF and 2025F PIN files were downloaded, hashed, joined by parcel number, and imported as property import `2e807f78-e038-446e-9e6a-5b8909f50185` with 753,206 accepted parcels, 36 rejected rows, and retained sales/geometry provenance. The provider is `broward.property_tax_roll`; the exact source hashes and join counts are recorded in `docs/data/source-registry.md`.
+- The refresh action now checks every active incident, runs the current evidence classifier, rematches stale/missing property evidence against the current county snapshot, and creates a new versioned score only when an explicit fire has changed or is incomplete. It does not score or list crashes, medical calls, routine alarms, unknown/non-fire calls, or other unsupported dispatch activity. Fire incidents with missing or ambiguous property evidence receive a current abstained row and remain visible with a dash and reason instead of requiring the reviewer to open the incident first.
+- The rescore endpoint was exercised twice after the property import and returned `200 {"rescored":18}` both times. `2323 W State Rd 84, Fort Lauderdale, FL 33312, USA` rematched under `property-match.v2` with `matched` status and received a current provisional score of `56.25`. The authenticated opportunity endpoint returned 18 current fire-only rows across Sarasota, Broward, and Miami-Dade; no crash, medical, or routine-alarm row was returned.
+- The repeated-refresh repair serializes the local SQLite write batch and preserves prior score runs through `previous_score_run_id`; unchanged refreshes now return without rewriting the county projection. The verified unchanged refresh returned HTTP 200 in under one second with `{"rescored":0}`. Address normalization now preserves `US` route prefixes and does not treat a five-digit house number as a ZIP. Focused property-resolution and scoring tests pass after these changes; the full verification contract passed with 81 tests, Ruff, web lint/build, migration, and API smoke.
+
+## 2026-08-05 incident visibility pagination repair
+
+- `588 BOUNDARY BLVD` was present in the latest Sarasota live snapshot, parsed into 22 retained observations, and linked to active incident `6935dad1-13f8-499f-941e-4d5a1678fced`; the omission was in the workspace list, not source retrieval or incident processing.
+- The workspace previously requested one global first page of 500 incidents while the local ledger contained 888+ active incidents across Broward, Miami-Dade, and Sarasota. Because that query was ordered oldest-first, newer Sarasota incidents could be silently absent from the client state.
+- The incidents API now supports `offset` pagination, and the web workspace loads every dispatch provider page independently before merging and time-ordering the results. The live provider-scoped check returns 396 Broward, 299 Miami-Dade, and 194 Sarasota incidents and includes `588 BOUNDARY BLVD`.
+- Regression coverage verifies that a second incident page is visible through the API. Full verification, migration, and API smoke passed after the repair.
+
+## 2026-08-05 Sarasota event-list scoring audit and fire-gate repair
+
+- The attached Sarasota dispatch list was audited against the live ledger using the preserved source event ID and source case number. All 57 of 57 rows are present and linked to active canonical incidents; two same-event multi-agency rows are correctly retained under one incident each, leaving 55 unique active incidents.
+- Current source-derived classification for those incidents is: 32 routine alarms, 13 traffic crashes, 3 elevator/escalator rescues, 2 electrical hazards, 1 hazmat incident, 1 unknown fire situation, 1 gas odor, and 2 public service fires. Non-fire families remain inspectable in Incidents but are intentionally not score-eligible.
+- The audit found and repaired a score-gate defect: `PUBLIC SERVICE FIRE`, `EXTINGUISHED FIRE`, and `ILLEGAL BURNING` were correctly classified as explicit fire families but had been omitted from `FIRE_SCOREABLE_FAMILIES`. The gate is now `fire-only-score-gate.v2`, and the affected current Sarasota rows were materialized through the normal scoring path.
+- `588 BOUNDARY BLVD` is now active, classified as `Public service fire`, score-eligible, and has a current abstained score with `property_match_uncertain`. That is an evaluated result, not a missing incident; the numeric rank is withheld until property evidence is resolved. `3884 NOTTINGHAM CIR` is also score-eligible and currently has a scored provisional rank of `66.92`.
+
+## 2026-08-19 dashboard accessibility redesign
+
+- The authenticated dashboard now uses an incident-command-ledger information architecture with grouped labelled navigation, a focused Review Desk, bounded Incidents and Opportunities queues, and Sources and Health as the controlled import/provenance workspace.
+- Review Desk renders at most eight priority incidents; Incidents and Opportunities render at most 50 rows per page; retrieval history renders at most 25 rows per page. Search, source/evidence, attention/eligibility, and ordering controls expose the relevant evidence without a multi-thousand-row document.
+- Opening an incident and using Reload Data are read-only. Browser/API-log verification confirmed no property-match, score, workflow, or state mutation from those interactions. Matching, scoring, state changes, assignments, and notes remain explicit and audited.
+- At an exact 390 by 844 CSS viewport, all eight destinations are labelled, list/detail navigation has a visible Back path, no horizontal overflow occurs, visible touch controls are at least 40 pixels high, and the visible normal-text contrast check found no result below 4.5 to 1.
+- Final verification passed with `./scripts/verify.sh` (87 tests, formatting, Ruff, mypy, web lint/type validation, and Next.js production build), `./.venv/bin/python scripts/dev.py migrate`, and `./.venv/bin/python scripts/dev.py api-smoke`. The shell still has no `python` alias, so the repository virtual-environment path was required for the latter commands.
+- The plan and acceptance gates are recorded in `docs/execution/dashboard-redesign-plan.md`; the browser and verification handoff is `docs/handoffs/dashboard-redesign-2026-08-19.md`.
+
+## 2026-08-19 opportunity scoring abstention repair
+
+- The starting live projection contained 71 current fire opportunity rows: 17 numeric scores, 36 `property_match_uncertain` abstentions, 16 `negative_source_relevance` suppressions, and two `contradictory_incident_evidence` abstentions. Every eligible fire already had a current score row, so this was not a missing-job or queue-wide scoring failure.
+- Address normalization `v3` and property matcher `v5` repair numeric ordinals, house-number ranges, city names that also occur in street names, exact-unit matches with conflicting municipality labels, coordinate candidate priority, and old normalized rows being crowded out by the 500-candidate fallback cap. Exact multi-unit sites may supply building-level scoring context without selecting an individual unit, owner, or LLC; they remain ineligible for automatic alerts.
+- Scoring release `opportunity-scoring.v10` computes the current contradiction gate from current grouped source observations. Historical contradiction evidence remains append-only, while corrected taxonomy or superseded duplicate captures no longer block the current score forever. Prior v7, v8, and v9 releases and score history remain reproducible and immutable.
+- The controlled audited refresh returned `{"rescored":71}`. The final projection is 29 scored, 26 evidence-based abstentions, and 16 policy suppressions. Broward improved from one scored row to 13; all 13 non-negative Broward opportunities now score. `3816 Hollywood Blvd` resolves as a six-unit `site_matched` building context with provisional score `66.5` and no individual owner attribution.
+- The 26 remaining abstentions are genuine under current evidence: 19 Miami-Dade and four Sarasota locations are blocks/intersections or otherwise low precision, two Sarasota exact addresses lack sufficient candidate separation, and one Sarasota exact multi-unit address remains unit-ambiguous. The 16 suppressed rows reflect the unchanged negative-source policy and were not reclassified as software failures.
+- Tests now disable every live county polling worker, preventing an isolated test run from competing with or mutating the live SQLite database. The focused regression recreates the old Hollywood collision with 500 decoy parcels and confirms that only the six exact site units survive candidate selection.
+- Final verification passed: `./scripts/verify.sh` (90 tests, Ruff formatting/lint, mypy, web lint/type validation, and Next.js production build), `./.venv/bin/python scripts/dev.py migrate`, and `./.venv/bin/python scripts/dev.py api-smoke`. Post-refresh audit-integrity smoke also passed. An immediate unchanged refresh returned `{"rescored":0}` in about six seconds.
+- Full evidence and the before/after table are recorded in `docs/handoffs/opportunity-scoring-abstention-repair-2026-08-19.md`.
+
+## 2026-08-19 Windows desktop distribution
+
+- A Windows x64 NSIS installer packages the Next.js standalone dashboard, a PyInstaller-built FastAPI backend, schema migrations, background source polling, tray behavior, and startup at Windows sign-in.
+- Mutable client state is outside the installation directory under the user's Windows AppData folder. Application updates replace program files only; the alert SQLite database and raw snapshots remain in AppData, and Restart to update first creates a consistent SQLite backup while retaining the newest pre-update copy.
+- Settings exposes the installed version and explicit Check, Download, and Restart to update controls backed by GitHub Releases. The release workflow emits the installer, `latest.yml`, and differential-update blockmap from a Windows runner.
+- Local verification covers persistence path isolation, desktop polling authorization, SQLite pre-update backup integrity, repository checks, and standalone web preparation. A Windows workflow covers the frozen backend migration/readiness smoke and installer artifact creation. A real client Windows install/restart/update pass and code signing remain external gates.
 
 ## Next controlled step
 

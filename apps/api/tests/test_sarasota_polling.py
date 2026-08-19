@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 
+import app.providers.polling as polling
 import httpx
 import pytest
 from app.config import Settings
@@ -163,6 +164,47 @@ def test_live_and_manual_identical_bytes_keep_distinct_provenance(tmp_path: Path
                 "live_poll",
             ]
             assert db.scalar(select(func.count()).select_from(RawSnapshot)) == 2
+    finally:
+        client.close()
+        engine.dispose()
+
+
+def test_next_poll_recovers_a_retained_snapshot_after_processing_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service, engine, sessions, client = _service(tmp_path)
+    original_process = polling.process_retrieval
+
+    def fail_processing(*args, **kwargs):
+        raise RuntimeError("simulated assembly failure")
+
+    try:
+        monkeypatch.setattr(polling, "process_retrieval", fail_processing)
+        failed = service.poll_once()
+        assert failed.status == "failed"
+        with sessions() as db:
+            assert db.scalar(select(func.count()).select_from(ProviderRetrieval)) == 1
+            assert db.scalar(select(func.count()).select_from(RawSnapshot)) == 1
+            assert db.scalar(select(func.count()).select_from(CanonicalIncident)) == 0
+            health = db.get(ProviderHealth, PROVIDER_ID)
+            assert health is not None
+            assert health.last_retrieval_status == "poll_failed"
+
+        monkeypatch.setattr(polling, "process_retrieval", original_process)
+        recovered = service.poll_once()
+        assert recovered.status == "replayed"
+        assert recovered.recovered_retrieval_count == 1
+        assert recovered.recovered_observation_count == 3
+        with sessions() as db:
+            assert db.scalar(select(func.count()).select_from(CanonicalIncident)) == 3
+            health = db.get(ProviderHealth, PROVIDER_ID)
+            assert health is not None
+            assert health.failure_count == 0
+            assert health.last_retrieval_status == "imported"
+            events = db.scalars(
+                select(AuditEvent.action).where(AuditEvent.action == "provider.retrieval_recovered")
+            ).all()
+            assert events == ["provider.retrieval_recovered"]
     finally:
         client.close()
         engine.dispose()

@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 
+const isDevelopment = process.env.NODE_ENV === "development";
+const scriptSources = ["'self'", "'unsafe-inline'", ...(isDevelopment ? ["'unsafe-eval'"] : [])].join(" ");
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: "standalone",
@@ -21,7 +24,7 @@ const nextConfig: NextConfig = {
         // Next.js emits inline RSC hydration/bootstrap scripts for the App Router.
         // Keep the policy same-origin and disallow object/frame injection while
         // allowing those framework bootstrap scripts to execute.
-        { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' http: https:; frame-ancestors 'none'; base-uri 'self'" },
+        { key: "Content-Security-Policy", value: `default-src 'self'; script-src ${scriptSources}; style-src 'self' 'unsafe-inline'; connect-src 'self' http: https:; frame-ancestors 'none'; base-uri 'self'` },
       ],
     }];
   },

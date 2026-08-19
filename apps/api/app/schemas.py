@@ -59,6 +59,9 @@ class ProviderHealthResponse(BaseModel):
     circuit_state: str
     schema_drift_detected: bool
     schema_alert_count: int
+    pending_processing_retrieval_count: int
+    pending_processing_observation_count: int
+    oldest_pending_processing_retrieval: Optional[datetime]
     known_status_note: str
 
 
@@ -125,6 +128,17 @@ class ObservationResponse(BaseModel):
     parser_version: str
     taxonomy_version: str
     raw_payload_reference: str
+
+
+class EvidenceGroupResponse(BaseModel):
+    id: str
+    representative: ObservationResponse
+    retained_observation_count: int
+    source_record_ids: List[str]
+    source_capture_count: int
+    first_retrieved_at: datetime
+    last_retrieved_at: datetime
+    grouping_version: str
 
 
 class ImportErrorResponse(BaseModel):
@@ -237,12 +251,15 @@ class IncidentDetailResponse(IncidentSummaryResponse):
     current_explanation: Dict[str, Any]
     source_retrieval_ids: List[str]
     observations: List[ObservationResponse]
+    evidence_groups: List[EvidenceGroupResponse]
     source_row_ids: List[str]
     relationship_history: List[Dict[str, Any]]
     timeline: List[Dict[str, Any]]
     evidence: List[Dict[str, Any]]
     match_decisions: List[Dict[str, Any]]
     aliases: List[Dict[str, Any]]
+    score_eligible: bool
+    score_eligibility_reason: Optional[str]
 
 
 class PropertyMappingProfileCreate(BaseModel):

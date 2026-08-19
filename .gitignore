@@ -20,3 +20,7 @@ dist/
 coverage/
 *.log
 *.egg-info/
+*.tsbuildinfo
+desktop/.build/
+desktop/release/
+desktop/build/

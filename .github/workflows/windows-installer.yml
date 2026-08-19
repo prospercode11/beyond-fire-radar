@@ -1,0 +1,126 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+      WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            apps/web/package-lock.json
+            desktop/package-lock.json
+
+      - name: Install Python dependencies
+        run: python -m pip install -e ".[test,quality]" "pyinstaller>=6.11,<7"
+
+      - name: Install web dependencies
+        run: npm ci --prefix apps/web
+
+      - name: Install desktop dependencies
+        run: npm ci --prefix desktop
+
+      - name: Validate tagged desktop version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $packageVersion = (Get-Content desktop/package.json | ConvertFrom-Json).version
+          if ("v$packageVersion" -ne "${{ github.ref_name }}") {
+            throw "Tag ${{ github.ref_name }} does not match desktop version v$packageVersion"
+          }
+
+      - name: Run repository verification
+        run: ./scripts/verify.sh
+        shell: bash
+        env:
+          PYTHON_BIN: python
+
+      - name: Build Windows backend and web runtime
+        run: |
+          npm --prefix desktop run prepare:web
+          npm --prefix desktop run build:backend
+
+      - name: Smoke-test packaged backend migration and API
+        shell: pwsh
+        run: |
+          $work = Join-Path $env:RUNNER_TEMP "bfr-smoke"
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          $database = (Join-Path $work "alerts.db") -replace '\\','/'
+          $env:APP_ENV = "desktop"
+          $env:DATABASE_URL = "sqlite:///$database"
+          $env:RAW_SNAPSHOT_DIR = Join-Path $work "raw"
+          $env:WEB_ORIGIN = "http://127.0.0.1:3000"
+          $env:ALLOWED_HOSTS = "127.0.0.1,localhost"
+          $env:ENABLE_API_DOCS = "false"
+          $backend = Resolve-Path "desktop/.build/backend/beyond-fire-radar-backend/beyond-fire-radar-backend.exe"
+          $process = Start-Process -FilePath $backend -ArgumentList "serve" -PassThru -WindowStyle Hidden
+          try {
+            $ready = $false
+            foreach ($attempt in 1..120) {
+              try {
+                $response = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:28741/readyz"
+                if ($response.StatusCode -eq 200) { $ready = $true; break }
+              } catch { Start-Sleep -Milliseconds 500 }
+            }
+            if (-not $ready) { throw "Packaged backend did not become ready" }
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
+          if (-not (Test-Path (Join-Path $work "alerts.db"))) { throw "Migrated database was not created" }
+
+      - name: Build NSIS installer
+        run: npm --prefix desktop exec electron-builder -- --win nsis --x64 --publish never
+
+      - name: Verify installer artifacts
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem desktop/release/Beyond-Fire-Radar-Setup-*.exe
+          if ($installer.Count -ne 1) { throw "Expected exactly one NSIS installer" }
+          if (-not (Test-Path desktop/release/latest.yml)) { throw "latest.yml was not generated" }
+          Get-FileHash $installer.FullName -Algorithm SHA256
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: beyond-fire-radar-windows-${{ github.ref_name }}
+          path: |
+            desktop/release/Beyond-Fire-Radar-Setup-*.exe
+            desktop/release/latest.yml
+            desktop/release/*.blockmap
+          if-no-files-found: error
+
+      - name: Publish GitHub Release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $assets = Get-ChildItem `
+            desktop/release/Beyond-Fire-Radar-Setup-*.exe, `
+            desktop/release/latest.yml, `
+            desktop/release/*.blockmap
+          gh release create "${{ github.ref_name }}" --generate-notes $assets.FullName

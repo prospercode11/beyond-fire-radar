@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.routes import (
@@ -26,7 +27,14 @@ from app.api.routes.providers import seed_providers
 from app.config import get_settings
 from app.db import SessionLocal
 from app.observability import configure_logging, log_request, metrics, monotonic_ms, prometheus_text
-from app.providers.polling import SarasotaPollingService, SarasotaPollingWorker
+from app.providers.polling import (
+    BrowardPollingService,
+    BrowardPollingWorker,
+    MiamiDadePollingService,
+    MiamiDadePollingWorker,
+    SarasotaPollingService,
+    SarasotaPollingWorker,
+)
 from app.rate_limit import RateLimitExceeded, client_key, limiter
 
 settings = get_settings()
@@ -39,19 +47,37 @@ async def lifespan(_: FastAPI):
     with SessionLocal() as db:
         seed_providers(db)
         db.commit()
-    polling_task = None
+    polling_tasks = []
     current_settings = get_settings()
     if (
         current_settings.enable_live_sarasota_dispatch_polling
         and current_settings.enable_sarasota_polling_worker
     ):
-        polling_task = asyncio.create_task(
-            SarasotaPollingWorker(SarasotaPollingService(current_settings)).run()
+        polling_tasks.append(
+            asyncio.create_task(
+                SarasotaPollingWorker(SarasotaPollingService(current_settings)).run()
+            )
+        )
+    if (
+        current_settings.enable_live_broward_dispatch_polling
+        and current_settings.enable_broward_polling_worker
+    ):
+        polling_tasks.append(
+            asyncio.create_task(BrowardPollingWorker(BrowardPollingService(current_settings)).run())
+        )
+    if (
+        current_settings.enable_live_miami_dade_dispatch_polling
+        and current_settings.enable_miami_dade_polling_worker
+    ):
+        polling_tasks.append(
+            asyncio.create_task(
+                MiamiDadePollingWorker(MiamiDadePollingService(current_settings)).run()
+            )
         )
     try:
         yield
     finally:
-        if polling_task is not None:
+        for polling_task in polling_tasks:
             polling_task.cancel()
             try:
                 await polling_task
@@ -75,6 +101,18 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"],
 )
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hostnames())
+
+
+@app.exception_handler(OperationalError)
+async def sqlite_contention_handler(_: Request, exc: OperationalError) -> JSONResponse:
+    if "database is locked" not in str(exc).lower():
+        raise exc
+    response = JSONResponse(
+        status_code=503,
+        content={"detail": "temporary database contention; retry the request"},
+    )
+    response.headers["Retry-After"] = "1"
+    return response
 
 
 def _apply_security_headers(response: Response, *, path: str, request_id: str) -> Response:
@@ -179,9 +217,21 @@ def healthz() -> dict[str, object]:
         "status": "ok",
         "service": current_settings.app_name,
         "environment": current_settings.app_env,
-        "live_polling_enabled": current_settings.enable_live_sarasota_dispatch_polling,
-        "live_polling_worker_enabled": current_settings.enable_sarasota_polling_worker,
-        "live_polling_interval_seconds": current_settings.sarasota_poll_interval_seconds,
+        "live_polling_enabled": (
+            current_settings.enable_live_sarasota_dispatch_polling
+            or current_settings.enable_live_miami_dade_dispatch_polling
+            or current_settings.enable_live_broward_dispatch_polling
+        ),
+        "live_polling_worker_enabled": (
+            current_settings.enable_sarasota_polling_worker
+            or current_settings.enable_miami_dade_polling_worker
+            or current_settings.enable_broward_polling_worker
+        ),
+        "live_polling_interval_seconds": min(
+            current_settings.sarasota_poll_interval_seconds,
+            current_settings.miami_dade_poll_interval_seconds,
+            current_settings.broward_poll_interval_seconds,
+        ),
         "learned_model_serving_enabled": current_settings.enable_learned_model_serving,
         "phase": "10-production-hardening",
     }

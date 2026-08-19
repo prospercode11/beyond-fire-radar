@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy import select
 
 from app.audit import record_audit
 from app.config import get_settings
 from app.dependencies import AdminUser, CurrentUser, DbSession, IngestionUser, request_id
+from app.incidents.service import unprocessed_retrievals
 from app.models import (
     DispatchObservation,
     ImportErrorRecord,
@@ -78,6 +79,7 @@ def provider_health(provider_id: str, user: CurrentUser, db: DbSession) -> Provi
     health = db.scalar(select(ProviderHealth).where(ProviderHealth.provider_id == provider_id))
     if health is None:
         raise HTTPException(status_code=404, detail="provider health has not been initialized")
+    pending = unprocessed_retrievals(db, provider_id=provider_id)
     return ProviderHealthResponse(
         provider_id=provider_id,
         last_successful_retrieval=health.last_successful_retrieval,
@@ -88,6 +90,9 @@ def provider_health(provider_id: str, user: CurrentUser, db: DbSession) -> Provi
         circuit_state=health.circuit_state,
         schema_drift_detected=health.schema_drift_detected,
         schema_alert_count=health.schema_alert_count,
+        pending_processing_retrieval_count=len(pending),
+        pending_processing_observation_count=sum(item.normalized_record_count for item in pending),
+        oldest_pending_processing_retrieval=(pending[0].retrieved_at if pending else None),
         known_status_note=health.known_status_note,
     )
 
@@ -117,14 +122,21 @@ def parser_versions(
 
 
 @router.get("/{provider_id}/retrievals", response_model=list[ImportJobResponse])
-def retrievals(provider_id: str, user: CurrentUser, db: DbSession) -> list[ImportJobResponse]:
+def retrievals(
+    provider_id: str,
+    user: CurrentUser,
+    db: DbSession,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[ImportJobResponse]:
     if db.get(Provider, provider_id) is None:
         raise HTTPException(status_code=404, detail="provider not found")
     jobs = db.scalars(
         select(ImportJob)
         .where(ImportJob.provider_id == provider_id)
         .order_by(ImportJob.created_at.desc())
-        .limit(100)
+        .offset(offset)
+        .limit(limit)
     ).all()
     return [_report_response(report_from_job(db, job, replayed=False)) for job in jobs]
 
@@ -135,14 +147,17 @@ def parser_compare(
     retrieval_id: str,
     user: CurrentUser,
     db: DbSession,
-    parser_version: str = PARSER_VERSION,
+    parser_version: Optional[str] = None,
 ) -> ParserComparisonResponse:
     provider = db.get(Provider, provider_id)
     retrieval = db.get(ProviderRetrieval, retrieval_id)
     if provider is None or retrieval is None or retrieval.provider_id != provider_id:
         raise HTTPException(status_code=404, detail="provider retrieval not found")
+    selected_parser_version = parser_version or provider.parser_version or PARSER_VERSION
     try:
-        result = DispatchIngestionService(get_settings()).compare(db, retrieval, parser_version)
+        result = DispatchIngestionService(get_settings()).compare(
+            db, retrieval, selected_parser_version
+        )
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=410, detail="raw snapshot payload was purged or is unavailable"

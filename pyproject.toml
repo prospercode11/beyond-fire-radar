@@ -33,6 +33,10 @@ postgres = [
 storage = [
   "boto3>=1.35,<2",
 ]
+property-data = [
+  "pyshp>=2.3,<3",
+  "pyproj>=3.6,<4",
+]
 redis = [
   "redis>=5,<6",
 ]

@@ -6,12 +6,18 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
 
+from app.db import get_db
+from app.incidents.evidence import group_observations
 from app.incidents.linkage import choose_linkage
+from app.main import app
+from app.models import CanonicalIncident, DispatchObservation, IncidentObservationLink
+from app.providers.taxonomy import UNKNOWN_FIRE
 from fastapi.testclient import TestClient
 from scripts.repair_sarasota_duplicate_incidents import (
     _duplicate_key,
     _observations_match_key,
 )
+from sqlalchemy import select
 
 from .test_auth import bootstrap
 
@@ -58,7 +64,7 @@ def test_sarasota_snapshot_processing_is_replay_idempotent(client: TestClient) -
     assert first.status_code == 201, first.text
     first_body = first.json()
     assert first_body["new_incident_count"] >= 1
-    assert first_body["classification_version"] == "incident-classification.v1"
+    assert first_body["classification_version"] == "incident-classification.v2"
 
     replay = _process(client, headers, retrieval_id)
     assert replay.status_code == 201, replay.text
@@ -73,10 +79,100 @@ def test_sarasota_snapshot_processing_is_replay_idempotent(client: TestClient) -
     detail = client.get(f"/api/v1/incidents/{incidents.json()[0]['id']}", headers=headers)
     assert detail.status_code == 200
     assert detail.json()["observations"]
+    assert detail.json()["evidence_groups"]
     assert detail.json()["source_row_ids"]
     assert detail.json()["source_acquisition_modes"] == ["manual_snapshot"]
     assert detail.json()["relationship_history"]
     assert detail.json()["timeline"]
+
+
+def test_incident_list_offset_exposes_rows_beyond_the_first_page(client: TestClient) -> None:
+    headers = _headers(client)
+    upload = _upload_json(
+        client,
+        headers,
+        [
+            {
+                "event_datetime": "2026-07-31T09:00:00Z",
+                "event_type": "PUBLIC SERVICE FIRE",
+                "location": "588 BOUNDARY BLVD",
+                "source_event_id": "E-PAGE-BOUNDARY",
+            },
+            {
+                "event_datetime": "2026-07-31T10:00:00Z",
+                "event_type": "STRUCTURE FIRE",
+                "location": "589 BOUNDARY BLVD",
+                "source_event_id": "E-PAGE-BOUNDARY-2",
+            },
+        ],
+        "phase3-incident-list-pagination",
+    )
+    assert upload.status_code == 201, upload.text
+    processed = _process(client, headers, upload.json()["retrieval_id"])
+    assert processed.status_code == 201, processed.text
+
+    first_page = client.get(
+        "/api/v1/incidents?provider_id=sarasota.official_dispatch&offset=0&limit=1",
+        headers=headers,
+    )
+    second_page = client.get(
+        "/api/v1/incidents?provider_id=sarasota.official_dispatch&offset=1&limit=1",
+        headers=headers,
+    )
+    assert first_page.status_code == 200
+    assert second_page.status_code == 200
+    assert first_page.json()[0]["canonical_location"] == "589 BOUNDARY BLVD"
+    assert second_page.json()[0]["canonical_location"] == "588 BOUNDARY BLVD"
+
+
+def test_replayed_processing_refreshes_stale_taxonomy_projection(client: TestClient) -> None:
+    headers = _headers(client)
+    upload = _upload_json(
+        client,
+        headers,
+        [
+            {
+                "event_datetime": "2026-07-31T09:00:00Z",
+                "event_type": "TRAFFIC CRASH W/INJURY",
+                "location": "555 Replay Refresh Road, Sarasota, FL",
+                "source_event_id": "E-REPLAY-TAXONOMY",
+            }
+        ],
+        "phase3-replay-taxonomy-refresh",
+    )
+    assert upload.status_code == 201, upload.text
+    retrieval_id = upload.json()["retrieval_id"]
+    assert _process(client, headers, retrieval_id).status_code == 201
+    incident = client.get(
+        "/api/v1/incidents?provider_id=sarasota.official_dispatch", headers=headers
+    ).json()[0]
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+    try:
+        persisted = db.get(CanonicalIncident, incident["id"])
+        assert persisted is not None
+        persisted.classification_family = UNKNOWN_FIRE
+        persisted.classification_version = "incident-classification.v1"
+        observation_ids = db.scalars(
+            select(IncidentObservationLink.observation_id).where(
+                IncidentObservationLink.incident_id == persisted.id,
+                IncidentObservationLink.is_current.is_(True),
+            )
+        ).all()
+        for observation_id in observation_ids:
+            observation = db.get(DispatchObservation, observation_id)
+            assert observation is not None
+            observation.normalized_event_family = UNKNOWN_FIRE
+        db.commit()
+    finally:
+        db_generator.close()
+
+    replay = _process(client, headers, retrieval_id)
+    assert replay.status_code == 201, replay.text
+    refreshed = client.get(f"/api/v1/incidents/{incident['id']}", headers=headers)
+    assert refreshed.status_code == 200
+    assert refreshed.json()["classification_family"] == "Traffic crash"
 
 
 def test_concurrent_processing_reserves_one_run_and_one_assignment(client: TestClient) -> None:
@@ -151,6 +247,12 @@ def test_concurrent_cross_retrieval_duplicate_source_identity_is_one_incident(
     assert incidents.status_code == 200
     assert len(incidents.json()) == 1
     assert incidents.json()[0]["observation_count"] == 2
+    detail = client.get(f"/api/v1/incidents/{incidents.json()[0]['id']}", headers=headers)
+    assert detail.status_code == 200
+    detail_body = detail.json()
+    assert len(detail_body["evidence_groups"]) == 1
+    assert detail_body["evidence_groups"][0]["retained_observation_count"] == 2
+    assert detail_body["evidence_groups"][0]["source_capture_count"] == 2
 
 
 def test_source_identity_is_scoped_to_provider(client: TestClient) -> None:
@@ -249,6 +351,58 @@ def test_reused_event_id_at_same_address_but_different_time_is_separate() -> Non
     assert choice.explanation["reason"] == "reused_source_event_id"
 
 
+def test_exact_match_outranks_unrelated_reused_id_guard() -> None:
+    new_observation = SimpleNamespace(
+        event_time=datetime(2026, 8, 3, 15, 0, tzinfo=timezone.utc),
+        original_location="1415 Brenner Park Drive, Sarasota, FL",
+        source_event_id="EVENT-EXACT",
+        source_case_number="CASE-EXACT",
+        source_record_id="record-new",
+        agency="SCFD",
+        normalized_event_family="General structure fire",
+        original_event_type="STRUCTURE FIRE",
+        grid="G1",
+        station="STA 1",
+    )
+    unrelated_observation = SimpleNamespace(
+        event_time=datetime(2026, 8, 3, 13, 0, tzinfo=timezone.utc),
+        original_location="425 US 41 BYP N, Sarasota, FL",
+        source_event_id="EVENT-EXACT",
+        source_case_number="CASE-OTHER",
+        source_record_id="record-unrelated",
+        agency="SCFD",
+        normalized_event_family="General structure fire",
+        original_event_type="STRUCTURE FIRE",
+        grid="G2",
+        station="STA 2",
+    )
+    exact_observation = SimpleNamespace(
+        event_time=new_observation.event_time,
+        original_location=new_observation.original_location,
+        source_event_id=new_observation.source_event_id,
+        source_case_number=new_observation.source_case_number,
+        source_record_id="record-old",
+        agency=new_observation.agency,
+        normalized_event_family=new_observation.normalized_event_family,
+        original_event_type=new_observation.original_event_type,
+        grid=new_observation.grid,
+        station=new_observation.station,
+    )
+    unrelated = SimpleNamespace(id="unrelated")
+    exact = SimpleNamespace(id="exact")
+
+    choice = choose_linkage(
+        new_observation,
+        [
+            (unrelated, [unrelated_observation]),
+            (exact, [exact_observation]),
+        ],
+    )
+
+    assert choice.candidate is exact
+    assert choice.decision == "match"
+
+
 def test_same_case_event_update_within_conservative_window_remains_linked() -> None:
     existing = SimpleNamespace(
         event_time=datetime(2026, 7, 31, 10, tzinfo=timezone.utc),
@@ -279,6 +433,50 @@ def test_same_case_event_update_within_conservative_window_remains_linked() -> N
 
     assert choice.decision == "match"
     assert choice.stage == "deterministic"
+
+
+def test_repeated_unchanged_source_captures_form_one_evidence_group() -> None:
+    common = {
+        "provider_id": "sarasota.official_dispatch",
+        "source_event_id": "E-GROUPED",
+        "event_time": datetime(2026, 7, 31, 10, tzinfo=timezone.utc),
+        "original_event_type": "STRUCTURE FIRE",
+        "normalized_event_family": "General structure fire",
+        "original_location": "100 Main Street, Sarasota, FL",
+    }
+    first = SimpleNamespace(
+        id="observation-1",
+        source_record_id="record-1",
+        raw_snapshot_id="snapshot-1",
+        retrieved_at=datetime(2026, 7, 31, 10, 5, tzinfo=timezone.utc),
+        **common,
+    )
+    second = SimpleNamespace(
+        id="observation-2",
+        source_record_id="record-2",
+        raw_snapshot_id="snapshot-2",
+        retrieved_at=datetime(2026, 7, 31, 10, 10, tzinfo=timezone.utc),
+        **common,
+    )
+    changed = SimpleNamespace(
+        id="observation-3",
+        source_record_id="record-3",
+        raw_snapshot_id="snapshot-3",
+        retrieved_at=datetime(2026, 7, 31, 10, 15, tzinfo=timezone.utc),
+        event_time=datetime(2026, 7, 31, 10, 6, tzinfo=timezone.utc),
+        provider_id=common["provider_id"],
+        source_event_id=common["source_event_id"],
+        original_event_type="ALARM SOUNDING",
+        normalized_event_family="Routine fire alarm",
+        original_location=common["original_location"],
+    )
+
+    groups = group_observations([first, second, changed])
+
+    assert [len(group.observations) for group in groups] == [2, 1]
+    assert groups[0].representative.id == "observation-1"
+    assert groups[0].source_record_ids == ["record-1", "record-2"]
+    assert len(groups[0].source_snapshot_ids) == 2
 
 
 def test_duplicate_repair_requires_every_observation_to_share_the_exact_key() -> None:
@@ -450,7 +648,7 @@ def test_incremental_update_rescores_and_manual_merge_split_are_audited(client: 
     detail = client.get(f"/api/v1/incidents/{incident_id}", headers=headers).json()
     assert len(detail["observations"]) == 2
     assert detail["contradiction_count"] >= 1
-    assert detail["classification_version"] == "incident-classification.v1"
+    assert detail["classification_version"] == "incident-classification.v2"
     assert detail["review_signal_status"] == "revoked"
     assert any(item["event_type"] == "review_signal_revoked" for item in detail["timeline"])
 

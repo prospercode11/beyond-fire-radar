@@ -14,6 +14,9 @@ class SnapshotStore(Protocol):
     def put(self, provider_id: str, content_hash: str, payload: bytes) -> str:
         """Persist immutable bytes and return a stable local/object reference."""
 
+    def put_file(self, provider_id: str, content_hash: str, path: Path) -> str:
+        """Persist an immutable file without materializing it in memory."""
+
     def read(self, reference: str) -> bytes:
         """Read a previously persisted immutable snapshot."""
 
@@ -42,6 +45,39 @@ class LocalSnapshotStore:
         try:
             with temporary.open("xb") as handle:
                 handle.write(payload)
+            os.replace(temporary, target)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+        return f"local://{safe_provider}/{content_hash}"
+
+    def put_file(self, provider_id: str, content_hash: str, path: Path) -> str:
+        _validate_content_hash(content_hash)
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        digest = hashlib.sha256()
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != content_hash:
+            raise ValueError("source file failed its immutable hash check")
+        safe_provider = provider_id.replace("/", "_").replace("..", "_")
+        directory = self.root / safe_provider
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / content_hash
+        if target.exists():
+            existing_digest = hashlib.sha256()
+            with target.open("rb") as existing:
+                for chunk in iter(lambda: existing.read(1024 * 1024), b""):
+                    existing_digest.update(chunk)
+            if existing_digest.hexdigest() != content_hash:
+                raise ValueError("immutable snapshot path contains a different payload")
+            return f"local://{safe_provider}/{content_hash}"
+        temporary = directory / f".{content_hash}.{uuid4().hex}.partial"
+        try:
+            with path.open("rb") as source, temporary.open("xb") as destination:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    destination.write(chunk)
             os.replace(temporary, target)
         finally:
             if temporary.exists():
@@ -138,6 +174,20 @@ class S3SnapshotStore:
             Body=payload,
             ContentType="application/octet-stream",
             Metadata={"sha256": content_hash, "provider-id": provider_id},
+        )
+        return reference
+
+    def put_file(self, provider_id: str, content_hash: str, path: Path) -> str:
+        key = self._key(provider_id, content_hash)
+        reference = f"s3://{self.bucket}/{key}"
+        self.client.upload_file(
+            str(path),
+            self.bucket,
+            key,
+            ExtraArgs={
+                "ContentType": "application/octet-stream",
+                "Metadata": {"sha256": content_hash, "provider-id": provider_id},
+            },
         )
         return reference
 

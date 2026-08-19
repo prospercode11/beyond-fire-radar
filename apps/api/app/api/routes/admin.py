@@ -60,6 +60,10 @@ def operations_status(user: AdminUser, db: DbSession) -> OperationsStatusRespons
         pending_notification_jobs=pending_count,
         oldest_pending_notification_at=pending.created_at if pending else None,
         provider_circuit_states=states,
-        live_polling_enabled=settings.enable_live_sarasota_dispatch_polling,
+        live_polling_enabled=(
+            settings.enable_live_sarasota_dispatch_polling
+            or settings.enable_live_miami_dade_dispatch_polling
+            or settings.enable_live_broward_dispatch_polling
+        ),
         learned_model_serving_enabled=settings.enable_learned_model_serving,
     )

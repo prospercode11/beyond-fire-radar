@@ -231,9 +231,9 @@ class PropertyImportService:
             raise ValueError("property provider not found")
         if provider.data_type != "property_bulk_file":
             raise ValueError("provider is not a property bulk-file provider")
-        if provider_id == "sarasota.property_appraiser" and not authorized_snapshot:
+        if not provider_id.startswith("fixture.") and not authorized_snapshot:
             raise PermissionError(
-                "official Sarasota property imports require an explicit authorized_snapshot attestation"
+                f"{provider.name} imports require an explicit authorized_snapshot attestation"
             )
         if provider_id == "fixture.sarasota.property_appraiser":
             acquisition_mode = "synthetic_fixture"
@@ -290,8 +290,8 @@ class PropertyImportService:
             content_hash=content_hash,
             content_type=content_type or "application/octet-stream",
             source_version=source_version,
-            parser_version=PROPERTY_PARSER_VERSION,
-            schema_version=PROPERTY_SCHEMA_VERSION,
+            parser_version=provider.parser_version or PROPERTY_PARSER_VERSION,
+            schema_version=provider.schema_version or PROPERTY_SCHEMA_VERSION,
             acquisition_mode=acquisition_mode,
             authorization_basis=authorization_basis,
             effective_at=effective_at,

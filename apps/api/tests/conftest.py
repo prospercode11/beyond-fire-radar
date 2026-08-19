@@ -37,6 +37,10 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("RAW_SNAPSHOT_DIR", str(tmp_path / "raw-snapshots"))
     monkeypatch.setenv("ENABLE_LIVE_SARASOTA_DISPATCH_POLLING", "false")
     monkeypatch.setenv("ENABLE_SARASOTA_POLLING_WORKER", "false")
+    monkeypatch.setenv("ENABLE_LIVE_MIAMI_DADE_DISPATCH_POLLING", "false")
+    monkeypatch.setenv("ENABLE_MIAMI_DADE_POLLING_WORKER", "false")
+    monkeypatch.setenv("ENABLE_LIVE_BROWARD_DISPATCH_POLLING", "false")
+    monkeypatch.setenv("ENABLE_BROWARD_POLLING_WORKER", "false")
     monkeypatch.setenv("ENABLE_SYNTHETIC_FIXTURE_PROVIDERS", "true")
     from app.config import get_settings
 
