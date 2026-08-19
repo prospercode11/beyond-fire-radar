@@ -106,7 +106,8 @@ jobs:
           if (-not (Test-Path (Join-Path $work "alerts.db"))) { throw "Migrated database was not created" }
 
       - name: Build NSIS installer
-        run: npm --prefix desktop exec electron-builder -- --win nsis --x64 --publish never
+        working-directory: desktop
+        run: npx electron-builder --win nsis --x64 --publish never
 
       - name: Verify installer artifacts
         shell: pwsh
