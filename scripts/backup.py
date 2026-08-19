@@ -39,8 +39,17 @@ def _sqlite_path(database_url: str) -> Path:
 
 def _copy_sqlite(source: Path, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(source) as source_db, sqlite3.connect(target) as target_db:
+    source_db: Optional[sqlite3.Connection] = None
+    target_db: Optional[sqlite3.Connection] = None
+    try:
+        source_db = sqlite3.connect(source, timeout=30)
+        target_db = sqlite3.connect(target, timeout=30)
         source_db.backup(target_db)
+    finally:
+        if target_db is not None:
+            target_db.close()
+        if source_db is not None:
+            source_db.close()
 
 
 def _raw_relative_path(value: str) -> Path:

@@ -7,6 +7,7 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
+from typing import Optional
 
 
 def _bundle_root() -> Path:
@@ -28,9 +29,17 @@ def _backup_sqlite(source: Path, output: Path) -> None:
     if temporary.exists():
         temporary.unlink()
     try:
-        with sqlite3.connect(source, timeout=30) as source_db:
-            with sqlite3.connect(temporary, timeout=30) as target_db:
-                source_db.backup(target_db)
+        source_db: Optional[sqlite3.Connection] = None
+        target_db: Optional[sqlite3.Connection] = None
+        try:
+            source_db = sqlite3.connect(source, timeout=30)
+            target_db = sqlite3.connect(temporary, timeout=30)
+            source_db.backup(target_db)
+        finally:
+            if target_db is not None:
+                target_db.close()
+            if source_db is not None:
+                source_db.close()
         os.replace(temporary, output)
     finally:
         if temporary.exists():
