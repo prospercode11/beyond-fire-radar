@@ -5,6 +5,7 @@ import importlib
 import json
 import os
 import tempfile
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.models import AuditChainHead, AuditEvent
 
 _AUDIT_LOCK_KEY = "audit_chain_lock"
+_WINDOWS_AUDIT_LOCK = threading.Lock()
 
 
 def _acquire_sqlite_audit_lock(db: Session) -> None:
@@ -30,23 +32,20 @@ def _acquire_sqlite_audit_lock(db: Session) -> None:
     """
     if db.get_bind().dialect.name != "sqlite" or _AUDIT_LOCK_KEY in db.info:
         return
+    if os.name == "nt":
+        # The packaged Windows app owns one backend process. A process-wide lock avoids
+        # msvcrt byte-range lock re-entry stalls while still serializing every API/poller
+        # audit writer in that process.
+        _WINDOWS_AUDIT_LOCK.acquire()
+        db.info[_AUDIT_LOCK_KEY] = (None, "windows")
+        return
     database_identity = str(db.connection().engine.url).encode("utf-8")
     lock_name = hashlib.sha256(database_identity).hexdigest()
     lock_path = Path(tempfile.gettempdir()) / f"beyond-fire-radar-audit-{lock_name}.lock"
     handle = lock_path.open("a+b")
-    if os.name == "nt":
-        # Windows byte-range locks require the locked byte to exist.
-        if lock_path.stat().st_size == 0:
-            handle.write(b"\0")
-            handle.flush()
-        handle.seek(0)
-        locking = importlib.import_module("msvcrt")
-        locking.locking(handle.fileno(), locking.LK_LOCK, 1)
-        db.info[_AUDIT_LOCK_KEY] = (handle, "windows")
-    else:
-        locking = importlib.import_module("fcntl")
-        locking.flock(handle.fileno(), locking.LOCK_EX)
-        db.info[_AUDIT_LOCK_KEY] = (handle, "posix")
+    locking = importlib.import_module("fcntl")
+    locking.flock(handle.fileno(), locking.LOCK_EX)
+    db.info[_AUDIT_LOCK_KEY] = (handle, "posix")
 
 
 def _release_sqlite_audit_lock(db: Session) -> None:
@@ -54,14 +53,12 @@ def _release_sqlite_audit_lock(db: Session) -> None:
     if lock_state is None:
         return
     handle, platform = lock_state
+    if platform == "windows":
+        _WINDOWS_AUDIT_LOCK.release()
+        return
     try:
-        if platform == "windows":
-            handle.seek(0)
-            locking = importlib.import_module("msvcrt")
-            locking.locking(handle.fileno(), locking.LK_UNLCK, 1)
-        else:
-            locking = importlib.import_module("fcntl")
-            locking.flock(handle.fileno(), locking.LOCK_UN)
+        locking = importlib.import_module("fcntl")
+        locking.flock(handle.fileno(), locking.LOCK_UN)
     finally:
         handle.close()
 
