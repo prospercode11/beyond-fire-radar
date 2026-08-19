@@ -73,6 +73,14 @@ def _release_audit_lock_after_rollback(db: Session) -> None:
     _release_sqlite_audit_lock(db)
 
 
+@sqlalchemy_event.listens_for(Session, "after_transaction_end")
+def _release_audit_lock_after_transaction_end(db: Session, transaction) -> None:
+    # Session.close() can end an implicit transaction without the explicit commit/rollback
+    # hooks above. Release at the outer transaction boundary as a final leak-proof guard.
+    if transaction.parent is None:
+        _release_sqlite_audit_lock(db)
+
+
 def _aware(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 

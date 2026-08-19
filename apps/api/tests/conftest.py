@@ -41,6 +41,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ENABLE_MIAMI_DADE_POLLING_WORKER", "false")
     monkeypatch.setenv("ENABLE_LIVE_BROWARD_DISPATCH_POLLING", "false")
     monkeypatch.setenv("ENABLE_BROWARD_POLLING_WORKER", "false")
+    monkeypatch.setenv("ENABLE_MIAMI_DADE_PROPERTY_DATA", "true")
+    monkeypatch.setenv("ENABLE_BROWARD_PROPERTY_DATA", "true")
     monkeypatch.setenv("ENABLE_SYNTHETIC_FIXTURE_PROVIDERS", "true")
     from app.config import get_settings
 
