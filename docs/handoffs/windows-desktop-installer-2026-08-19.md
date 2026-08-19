@@ -28,10 +28,12 @@ Beyond Fire Radar now has a Windows x64 desktop distribution path. The NSIS inst
 - `npm --prefix desktop run prepare:web` — passed; the standalone route manifest targets the packaged backend at `127.0.0.1:28741`.
 - macOS PyInstaller structural build — passed. The frozen backend migrated a fresh SQLite database through `0027`, returned 200 from `/readyz`, created a live consistent backup, and the backup returned `ok` from SQLite `integrity_check`.
 - Standalone runtime smoke — passed: dashboard `/` returned 200 and `/api-backend/readyz` proxied to the packaged backend with 200.
+- GitHub Actions Windows run `32312412030` — passed: full repository verification, native Windows PyInstaller build, fresh-database migration/readiness smoke, NSIS build, artifact checks, and workflow upload.
+- Release `v0.1.0` — published in the repository with `Beyond-Fire-Radar-Setup-0.1.0.exe` (125,070,952 bytes), `latest.yml`, and the differential-update blockmap. The installer SHA-256 is `a5e7f07c2cbfdd5c67230bc74e7d8372416456b90f63b1eeafb22126fa1404f4`.
 - `git diff --check` — passed.
 
 ## External gates
 
-- This macOS host cannot execute the Windows installer, validate Windows sign-in startup, exercise the system tray on Windows, or run a true in-place Windows update. The GitHub Windows workflow covers the build and frozen-backend smoke, but a client-like Windows install/reboot/update/uninstall exercise remains required.
+- This macOS host cannot execute the Windows installer, validate Windows sign-in startup, exercise the system tray on Windows, or run a true in-place Windows update. The GitHub Windows workflow passed the native build and frozen-backend smoke, but a client-like Windows install/reboot/update/uninstall exercise remains required.
 - The installer is unsigned unless the repository receives `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` secrets. An unsigned first release can trigger Windows SmartScreen and does not support a publisher-trust claim.
 - Unauthenticated GitHub Release updates require the repository/releases to be public. A private source repository needs a separate public update channel or client-side GitHub authentication. No GitHub token is embedded in the installer.
