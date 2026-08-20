@@ -1,5 +1,9 @@
 # Windows desktop installer handoff — 2026-08-19
 
+## Correction — 2026-08-20
+
+The `v0.1.0` installer described below was packaged without `resources/web` and cannot start. The release-path defects behind it, the fix, and the new packaging gates are recorded in `docs/handoffs/windows-installer-missing-web-runtime-2026-08-20.md`. The verification evidence in this document covers the repository checks and the packaged backend; it does not establish that the shipped installer contained a runnable dashboard.
+
 ## Outcome
 
 Beyond Fire Radar now has a Windows x64 desktop distribution path. The NSIS installer contains the existing Next.js dashboard and a frozen FastAPI backend. The desktop shell starts at Windows sign-in, continues source polling while the dashboard window is hidden, and exposes Open, Check for updates, and Quit controls from the system tray.

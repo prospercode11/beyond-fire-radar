@@ -11,18 +11,22 @@ const {
   Tray,
 } = require("electron");
 const { autoUpdater } = require("electron-updater");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const net = require("node:net");
 const path = require("node:path");
 const {
   BACKEND_PORT,
   buildBackendEnvironment,
+  describeMissingResources,
   desktopDataPaths,
   isPathInside,
+  missingRuntimeResources,
+  runtimeResourcePaths,
 } = require("./runtime.cjs");
 
 const START_HIDDEN = process.argv.includes("--background");
+const MAX_WEB_RESTARTS = 5;
 const UPDATE_SUPPORTED = process.platform === "win32" && app.isPackaged;
 const instanceLock = app.requestSingleInstanceLock();
 
@@ -31,6 +35,9 @@ let tray = null;
 let backendProcess = null;
 let webProcess = null;
 let backendRestartTimer = null;
+let webRestartTimer = null;
+let webPort = null;
+let webRestartAttempts = 0;
 let runtimeUrl = null;
 let isQuitting = false;
 let updateStatus = {
@@ -114,13 +121,41 @@ async function waitForUrl(url, timeoutMs = 90000) {
   );
 }
 
-function backendExecutable() {
-  const filename = process.platform === "win32" ? "beyond-fire-radar-backend.exe" : "beyond-fire-radar-backend";
-  return path.join(process.resourcesPath, "backend", "beyond-fire-radar-backend", filename);
+function resourcePaths() {
+  return runtimeResourcePaths(process.resourcesPath, process.platform);
 }
 
-function webDirectory() {
-  return path.join(process.resourcesPath, "web");
+function backendExecutable() {
+  return resourcePaths().backendExecutable;
+}
+
+// Packaging only warns when a bundled resource directory is absent, so an
+// incomplete installation has to be reported once, in full, instead of surfacing
+// as whichever launch step happens to run first.
+function assertRuntimeResources() {
+  const missing = missingRuntimeResources(resourcePaths(), (target) => fs.existsSync(target));
+  if (missing.length === 0) return;
+  writeLog(`incomplete installation; missing ${missing.map((entry) => entry.path).join(", ")}`);
+  throw new Error(describeMissingResources(missing));
+}
+
+// Windows does not pass a kill on to a child's own children, and a surviving
+// backend keeps the alert database open, which blocks the next start and any
+// in-place update.
+function terminateProcessTree(child, name) {
+  if (!child || child.exitCode !== null) return;
+  if (process.platform === "win32" && typeof child.pid === "number") {
+    const killed = spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+      windowsHide: true,
+    });
+    if (!killed.error && killed.status === 0) return;
+    writeLog(`taskkill did not stop ${name}; falling back to a direct kill`);
+  }
+  try {
+    child.kill();
+  } catch (error) {
+    writeLog(`failed to stop ${name}: ${error.message}`);
+  }
 }
 
 function attachProcessLogging(child, name) {
@@ -155,12 +190,13 @@ function launchBackend(environment) {
   });
 }
 
-function launchWeb(webPort) {
-  const directory = webDirectory();
-  const server = path.join(directory, "server.js");
-  if (!fs.existsSync(server)) throw new Error(`Web server is missing: ${server}`);
-  webProcess = spawn(process.execPath, [server], {
-    cwd: directory,
+function launchWeb() {
+  const { webDirectory, webServer } = resourcePaths();
+  if (!fs.existsSync(webServer)) {
+    throw new Error(describeMissingResources([{ label: "Dashboard server", path: webServer }]));
+  }
+  webProcess = spawn(process.execPath, [webServer], {
+    cwd: webDirectory,
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: "1",
@@ -175,20 +211,32 @@ function launchWeb(webPort) {
   webProcess.on("exit", (code, signal) => {
     webProcess = null;
     writeLog(`web exited code=${code} signal=${signal}`);
+    if (isQuitting || webRestartAttempts >= MAX_WEB_RESTARTS) return;
+    webRestartAttempts += 1;
+    clearTimeout(webRestartTimer);
+    webRestartTimer = setTimeout(() => {
+      try {
+        launchWeb();
+        writeLog(`web restart attempt ${webRestartAttempts} started on port ${webPort}`);
+      } catch (error) {
+        writeLog(`web restart failed: ${error.message}`);
+      }
+    }, 5000);
   });
 }
 
 async function startRuntime() {
+  assertRuntimeResources();
   const resolved = ensureDataDirectories();
   if (isPathInside(resolved.databasePath, process.resourcesPath)) {
     throw new Error("Refusing to store the alert database inside the replaceable app directory.");
   }
-  const webPort = await findFreePort();
+  webPort = await findFreePort();
   runtimeUrl = `http://127.0.0.1:${webPort}`;
   const backendEnvironment = buildBackendEnvironment(resolved, runtimeUrl);
   launchBackend(backendEnvironment);
   await waitForUrl(`http://127.0.0.1:${BACKEND_PORT}/readyz`);
-  launchWeb(webPort);
+  launchWeb();
   await waitForUrl(runtimeUrl);
   writeLog(`runtime ready at ${runtimeUrl}; data at ${resolved.dataDirectory}`);
 }
@@ -345,10 +393,11 @@ async function createPreUpdateBackup() {
 
 async function stopServices() {
   clearTimeout(backendRestartTimer);
+  clearTimeout(webRestartTimer);
   backendRestartTimer = null;
-  for (const child of [webProcess, backendProcess]) {
-    if (child && !child.killed) child.kill();
-  }
+  webRestartTimer = null;
+  terminateProcessTree(webProcess, "web");
+  terminateProcessTree(backendProcess, "backend");
   webProcess = null;
   backendProcess = null;
 }
@@ -400,6 +449,9 @@ app.on("window-all-closed", () => {
 });
 
 app.whenReady().then(async () => {
+  // A second copy would fight the first for the fixed backend port; the running
+  // instance takes over through the second-instance handler.
+  if (!instanceLock) return;
   try {
     session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) =>
       callback(false),

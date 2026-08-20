@@ -43,15 +43,67 @@ function buildBackendEnvironment(paths, webOrigin) {
   };
 }
 
+const WEB_ENTRY_FILENAME = "server.js";
+const BACKEND_DIRECTORY_NAME = "beyond-fire-radar-backend";
+
+function backendExecutableName(platform) {
+  return platform === "win32" ? `${BACKEND_DIRECTORY_NAME}.exe` : BACKEND_DIRECTORY_NAME;
+}
+
+function runtimeResourcePaths(resourcesPath, platform) {
+  const webDirectory = path.join(resourcesPath, "web");
+  const backendDirectory = path.join(resourcesPath, "backend", BACKEND_DIRECTORY_NAME);
+  return {
+    webDirectory,
+    webServer: path.join(webDirectory, WEB_ENTRY_FILENAME),
+    webStaticDirectory: path.join(webDirectory, ".next", "static"),
+    webDependencyManifest: path.join(webDirectory, "node_modules", "next", "package.json"),
+    backendDirectory,
+    backendExecutable: path.join(backendDirectory, backendExecutableName(platform)),
+  };
+}
+
+// Packaging skips a missing extraResources directory with a warning instead of an
+// error, so the shell has to treat an incomplete installation as a first-class
+// startup failure rather than discovering it one launch step at a time.
+function missingRuntimeResources(resourcePaths, exists) {
+  return [
+    ["Dashboard server", resourcePaths.webServer],
+    ["Dashboard browser assets", resourcePaths.webStaticDirectory],
+    ["Dashboard dependencies", resourcePaths.webDependencyManifest],
+    ["Background alert service", resourcePaths.backendExecutable],
+  ]
+    .filter(([, target]) => !exists(target))
+    .map(([label, target]) => ({ label, path: target }));
+}
+
+function describeMissingResources(missing) {
+  const details = missing.map((entry) => `${entry.label}: ${entry.path}`).join("\n");
+  return [
+    "This installation is incomplete, so Beyond Fire Radar cannot start.",
+    "",
+    "Missing from the installed application:",
+    details,
+    "",
+    "Download the current installer and install it again. Your alert database, snapshots, and backups stay in your Windows user profile and are not affected.",
+  ].join("\n");
+}
+
 function isPathInside(candidate, parent) {
   const relative = path.relative(path.resolve(parent), path.resolve(candidate));
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
 module.exports = {
+  BACKEND_DIRECTORY_NAME,
   BACKEND_PORT,
+  WEB_ENTRY_FILENAME,
+  backendExecutableName,
   buildBackendEnvironment,
+  describeMissingResources,
   desktopDataPaths,
   isPathInside,
+  missingRuntimeResources,
+  runtimeResourcePaths,
   sqliteUrl,
 };
