@@ -40,7 +40,15 @@
     "extraResources": [
       {
         "from": ".build/web",
-        "to": "web"
+        "to": "web",
+        "filter": [
+          "**/*",
+          "!node_modules"
+        ]
+      },
+      {
+        "from": ".build/web/node_modules",
+        "to": "web/node_modules"
       },
       {
         "from": ".build/backend",

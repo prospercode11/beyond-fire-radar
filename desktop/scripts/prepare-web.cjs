@@ -107,7 +107,7 @@ function verifyPreparedRuntime(buildRoot) {
     ["dashboard server", path.join(buildRoot, "server.js")],
     ["browser assets", path.join(buildRoot, ".next", "static")],
     ["server manifest", path.join(buildRoot, ".next", "required-server-files.json")],
-    ["Next.js dependency", path.join(buildRoot, "node_modules", "next")],
+    ["Next.js dependency", path.join(buildRoot, "node_modules", "next", "package.json")],
   ];
   const missing = required.filter(([, target]) => !fs.existsSync(target));
   if (missing.length > 0) {

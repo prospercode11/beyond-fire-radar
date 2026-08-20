@@ -61,7 +61,7 @@ test("a packaged tree without the bundled dashboard is reported as incomplete", 
   const missing = missingRuntimeResources(resolved, (target) => present.has(target));
   assert.deepEqual(
     missing.map((entry) => entry.path),
-    [resolved.webServer, resolved.webStaticDirectory, resolved.webDependencyDirectory],
+    [resolved.webServer, resolved.webStaticDirectory, resolved.webDependencyManifest],
   );
   const message = describeMissingResources(missing);
   assert.match(message, /installation is incomplete/);

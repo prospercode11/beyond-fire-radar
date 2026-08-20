@@ -23,6 +23,23 @@ Four defects lined up, all in the release path rather than in the application:
 
 Evidence: GitHub Actions run `32312412030` (the run whose artifact became the `v0.1.0` release) contains the `file source doesn't exist` warning, and its build step is 43 seconds long — PyInstaller only, with no Next.js build in it.
 
+## Second defect, found by the new gate
+
+The first CI run of this fix failed at the new `afterPack` check with `Dashboard dependencies: ...\resources\web\node_modules\next` missing, and the failure reproduced locally with `electron-builder --linux dir`: 77 of 1,979 prepared files were packaged.
+
+`app-builder-lib/out/util/filter.js` rejects a matcher's own root `node_modules` before any pattern is evaluated:
+
+```js
+// filter the root node_modules, but not a subnode_modules
+if (relative === "node_modules") {
+  return false;
+}
+```
+
+That filter is applied to every matcher, `extraResources` included, and no `filter` pattern can override it. A single `{ from: ".build/web", to: "web" }` mapping can therefore never carry the dashboard's dependencies. The defect was present in the original configuration as well; it was hidden because the whole directory was already absent.
+
+`node_modules` is now mapped as its own entry, `{ from: ".build/web/node_modules", to: "web/node_modules" }`, where the excluded name is never the matcher's root, and the web entry excludes `node_modules` so the two do not copy the same files. `desktop/tests/packaging.test.cjs` pins that layout, since the failure mode is silent.
+
 ## Changes
 
 - `desktop/scripts/prepare-web.cjs` now starts the Next.js CLI through `process.execPath` with the CLI path resolved out of `apps/web/node_modules`, so no shell and no `npm.cmd` is involved on any platform. Spawn errors, signals, and non-zero exits each fail with a specific message.
@@ -41,6 +58,7 @@ Evidence: GitHub Actions run `32312412030` (the run whose artifact became the `v
 - `npm --prefix desktop run prepare:web` — passed on Linux: 1,979 files prepared, standalone entry `.`.
 - `node desktop/scripts/verify-package.cjs --dir <tree> --boot` against a packaged-shaped copy of that output — passed: the packaged `server.js` served HTTP 200.
 - The same check against a tree with `resources/web` deleted — failed with exit code 1 and named all three missing dashboard paths. The `afterPack` hook rejected the identical tree. This is the exact condition that shipped in `v0.1.0`.
+- `npx electron-builder --linux dir` against the repaired configuration — passed: `afterPack` verified the packaged tree, 1,978 of 1,979 prepared files were packaged (only `public/.gitkeep`, a placeholder, is dropped), and the packaged dashboard served HTTP 200.
 - New desktop tests cover both standalone layouts, the flattening result, rejection of a runtime missing `server.js`, rejection of empty browser assets, the packaged Windows/macOS resource layout, and the incomplete-installation report.
 
 ## External gates

@@ -57,7 +57,7 @@ function runtimeResourcePaths(resourcesPath, platform) {
     webDirectory,
     webServer: path.join(webDirectory, WEB_ENTRY_FILENAME),
     webStaticDirectory: path.join(webDirectory, ".next", "static"),
-    webDependencyDirectory: path.join(webDirectory, "node_modules", "next"),
+    webDependencyManifest: path.join(webDirectory, "node_modules", "next", "package.json"),
     backendDirectory,
     backendExecutable: path.join(backendDirectory, backendExecutableName(platform)),
   };
@@ -70,7 +70,7 @@ function missingRuntimeResources(resourcePaths, exists) {
   return [
     ["Dashboard server", resourcePaths.webServer],
     ["Dashboard browser assets", resourcePaths.webStaticDirectory],
-    ["Dashboard dependencies", resourcePaths.webDependencyDirectory],
+    ["Dashboard dependencies", resourcePaths.webDependencyManifest],
     ["Background alert service", resourcePaths.backendExecutable],
   ]
     .filter(([, target]) => !exists(target))
