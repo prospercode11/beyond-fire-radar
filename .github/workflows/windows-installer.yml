@@ -153,10 +153,17 @@ jobs:
             Stop-Process -Force -ErrorAction SilentlyContinue
           node desktop/scripts/verify-package.cjs --dir $target --boot
 
+      # A ref name carrying a slash, such as a feature branch, is not a legal
+      # artifact name, so the upload has to use a flattened form of it.
+      - name: Name the workflow artifact
+        id: artifact
+        shell: bash
+        run: echo "name=beyond-fire-radar-windows-${GITHUB_REF_NAME//\//-}" >> "$GITHUB_OUTPUT"
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v6
         with:
-          name: beyond-fire-radar-windows-${{ github.ref_name }}
+          name: ${{ steps.artifact.outputs.name }}
           path: |
             desktop/release/Beyond-Fire-Radar-Setup-*.exe
             desktop/release/latest.yml

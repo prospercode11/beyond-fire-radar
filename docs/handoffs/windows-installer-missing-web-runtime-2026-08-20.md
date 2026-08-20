@@ -61,6 +61,19 @@ That filter is applied to every matcher, `extraResources` included, and no `filt
 - `npx electron-builder --linux dir` against the repaired configuration — passed: `afterPack` verified the packaged tree, 1,978 of 1,979 prepared files were packaged (only `public/.gitkeep`, a placeholder, is dropped), and the packaged dashboard served HTTP 200.
 - New desktop tests cover both standalone layouts, the flattening result, rejection of a runtime missing `server.js`, rejection of empty browser assets, the packaged Windows/macOS resource layout, and the incomplete-installation report.
 
+## Windows verification evidence
+
+GitHub Actions run [`32408935527`](https://github.com/prospercode11/beyond-fire-radar/actions/runs/32408935527) on `windows-latest`, commit `3bd15fa`:
+
+- `Run repository verification` — passed.
+- `Build Windows web runtime` — passed in 20 seconds. The equivalent step in the `v0.1.0` build was a 2-second silent failure.
+- `Verify prepared web runtime` — passed.
+- `Build Windows backend` and the packaged-backend migration/readiness smoke — passed.
+- `Build NSIS installer` — passed, including `after-pack: verified runtime resources in ...\release\win-unpacked`, and produced `Beyond-Fire-Radar-Setup-0.1.1.exe` with SHA-256 `26bff3ea18c8591b8f8c343c971323dd3a2f7f7499f529d39d00163c13fae22d`.
+- `Verify packaged runtime resources` — passed: `verify-package: packaged dashboard served http://127.0.0.1:51682/`.
+- `Verify the installer installs a runnable application` — passed: a silent install into `D:\a\_temp\bfr-install` produced the application executable, and `verify-package: packaged dashboard served http://127.0.0.1:51699/` confirmed the installed dashboard serves HTTP 200. This is the exact condition that failed on the client machine.
+- `Upload workflow artifact` — failed on this run only, because the artifact name embedded a branch ref containing a slash. That is a pre-existing workflow defect that never surfaced on `main` or on a tag; the artifact name is now flattened before upload. It is packaging-independent and did not affect the installer.
+
 ## External gates
 
 - The `npm.cmd` spawn failure is Windows-only and cannot be reproduced on this Linux session; it is fixed by removing the `npm` spawn entirely. The Windows workflow is the verification, and its new steps fail the build if the dashboard is absent for any other reason.
