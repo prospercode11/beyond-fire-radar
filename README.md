@@ -63,7 +63,11 @@ The Windows desktop package lives under `desktop/`. It installs the dashboard an
 
 GitHub Actions builds the x64 NSIS installer from `.github/workflows/windows-installer.yml`. Pushing a version tag such as `v0.1.0` creates a GitHub Release containing the installer, update metadata, and blockmap. In the installed app, Settings provides Check, Download, and Restart to update actions. Immediately before installing an update, the desktop shell creates a consistent SQLite backup and retains the newest pre-update database backup.
 
-The current macOS development host cannot execute or visually validate the Windows installer. The Windows workflow therefore performs the packaged backend migration/readiness smoke test and validates the generated installer artifacts on a Windows runner. Until a Windows code-signing certificate is configured in the repository secrets, Windows may show an unknown-publisher/SmartScreen warning; this is a distribution limitation, not a successful signing claim.
+Packaging is gated rather than trusted. `npm --prefix desktop run prepare:web` builds the Next.js standalone runtime, normalizes it so `server.js` is always at the root of the packaged `resources/web`, and verifies its own output. An `afterPack` hook fails the build if the packaged application is missing the dashboard or the backend, and the workflow additionally boots the packaged dashboard, silently installs the built installer, and boots the installed application. `node desktop/scripts/verify-package.cjs --dir <directory> --boot` runs the same check by hand.
+
+The current macOS development host cannot execute or visually validate the Windows installer. The Windows workflow therefore performs the packaged backend migration/readiness smoke test, the packaged and installed dashboard boot checks, and installer artifact validation on a Windows runner. Until a Windows code-signing certificate is configured in the repository secrets, Windows may show an unknown-publisher/SmartScreen warning; this is a distribution limitation, not a successful signing claim.
+
+`v0.1.0` was published without the bundled dashboard and cannot start; use `0.1.1` or later.
 
 ## PostgreSQL/PostGIS and Redis
 

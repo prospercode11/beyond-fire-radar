@@ -61,10 +61,21 @@ jobs:
         env:
           PYTHON_BIN: python
 
-      - name: Build Windows backend and web runtime
+      - name: Build Windows web runtime
+        shell: bash
+        run: npm --prefix desktop run prepare:web
+
+      - name: Verify prepared web runtime
+        shell: bash
         run: |
-          npm --prefix desktop run prepare:web
-          npm --prefix desktop run build:backend
+          set -euo pipefail
+          test -f desktop/.build/web/server.js
+          test -d desktop/.build/web/.next/static
+          test -d desktop/.build/web/node_modules/next
+
+      - name: Build Windows backend
+        shell: bash
+        run: npm --prefix desktop run build:backend
 
       - name: Smoke-test packaged backend migration and API
         shell: pwsh
@@ -107,15 +118,40 @@ jobs:
 
       - name: Build NSIS installer
         working-directory: desktop
+        shell: bash
         run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Verify packaged runtime resources
+        working-directory: desktop
+        shell: bash
+        run: npm run verify:package:boot
 
       - name: Verify installer artifacts
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $installer = Get-ChildItem desktop/release/Beyond-Fire-Radar-Setup-*.exe
           if ($installer.Count -ne 1) { throw "Expected exactly one NSIS installer" }
           if (-not (Test-Path desktop/release/latest.yml)) { throw "latest.yml was not generated" }
           Get-FileHash $installer.FullName -Algorithm SHA256
+
+      - name: Verify the installer installs a runnable application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = (Get-ChildItem desktop/release/Beyond-Fire-Radar-Setup-*.exe)[0].FullName
+          $target = Join-Path $env:RUNNER_TEMP "bfr-install"
+          if (Test-Path $target) { Remove-Item -Recurse -Force $target }
+          # NSIS accepts /S for a silent install and /D for the target directory.
+          $install = Start-Process -FilePath $installer -ArgumentList "/S", "/D=$target" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Silent install failed with $($install.ExitCode)" }
+          if (-not (Test-Path (Join-Path $target "Beyond Fire Radar.exe"))) {
+            throw "The installer produced no application executable"
+          }
+          # A silent install can start the app; stop it before probing the files.
+          Get-Process -Name "Beyond Fire Radar" -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+          node desktop/scripts/verify-package.cjs --dir $target --boot
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v6
