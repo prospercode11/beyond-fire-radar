@@ -1003,9 +1003,30 @@ function AuthScreen({
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
+  const [signInRequired, setSignInRequired] = useState(true);
   useEffect(() => {
-    setToken(sessionStorage.getItem("beyond-fire-radar-token"));
-    setSessionReady(true);
+    let cancelled = false;
+    async function resolveSession() {
+      // A backend in single-operator mode answers /auth/me with no Authorization
+      // header, so the desktop build never shows a sign-in screen. Any failure is
+      // treated as "this install still gates on sign-in", which keeps the login
+      // path intact for a deployment that does require it.
+      let required = true;
+      try {
+        await apiRequest("/api/v1/auth/me", null);
+        required = false;
+      } catch {
+        required = true;
+      }
+      if (cancelled) return;
+      setSignInRequired(required);
+      setToken(sessionStorage.getItem("beyond-fire-radar-token"));
+      setSessionReady(true);
+    }
+    void resolveSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
   function authenticated(nextToken: string) {
     setToken(nextToken);
@@ -1022,16 +1043,21 @@ export default function Home() {
         </div>
       </main>
     );
-  if (!token) return <AuthScreen onAuthenticated={authenticated} />;
-  return <Workspace token={token} onLogout={logout} />;
+  if (signInRequired && !token)
+    return <AuthScreen onAuthenticated={authenticated} />;
+  return (
+    <Workspace token={token} onLogout={logout} canSignOut={signInRequired} />
+  );
 }
 
 function Workspace({
   token,
   onLogout,
+  canSignOut,
 }: {
-  token: string;
+  token: string | null;
   onLogout: () => void;
+  canSignOut: boolean;
 }) {
   const [activeView, setActiveView] = useState<View>("command");
   const [user, setUser] = useState<{
@@ -1819,20 +1845,32 @@ function Workspace({
               <small>Human review required</small>
             </span>
           </div>
-          <button
-            className="user-chip user-chip-button"
-            onClick={onLogout}
-            type="button"
-          >
-            <span className="avatar">
-              {user?.display_name.slice(0, 2).toUpperCase() ?? "SA"}
-            </span>
-            <span>
-              <strong>{user?.display_name ?? "Reviewer"}</strong>
-              <small>Sign out</small>
-            </span>
-            <Icon name="logout" size={15} />
-          </button>
+          {canSignOut ? (
+            <button
+              className="user-chip user-chip-button"
+              onClick={onLogout}
+              type="button"
+            >
+              <span className="avatar">
+                {user?.display_name.slice(0, 2).toUpperCase() ?? "SA"}
+              </span>
+              <span>
+                <strong>{user?.display_name ?? "Reviewer"}</strong>
+                <small>Sign out</small>
+              </span>
+              <Icon name="logout" size={15} />
+            </button>
+          ) : (
+            <div className="user-chip">
+              <span className="avatar">
+                {user?.display_name.slice(0, 2).toUpperCase() ?? "SA"}
+              </span>
+              <span>
+                <strong>{user?.display_name ?? "Reviewer"}</strong>
+                <small>Local operator</small>
+              </span>
+            </div>
+          )}
         </div>
       </aside>
       <main className="content">
@@ -2029,6 +2067,7 @@ function Workspace({
                 <SettingsView
                   user={user}
                   onLogout={onLogout}
+                  canSignOut={canSignOut}
                   pollingStatus={pollingStatus}
                 />
               ) : null}
@@ -4371,10 +4410,12 @@ function HealthView({
 function SettingsView({
   user,
   onLogout,
+  canSignOut,
   pollingStatus,
 }: {
   user: { display_name: string; email: string; roles: string[] } | null;
   onLogout: () => void;
+  canSignOut: boolean;
   pollingStatus: ReturnType<typeof livePollingStatus>;
 }) {
   return (
@@ -4426,13 +4467,20 @@ function SettingsView({
           Server-side role checks govern every import, correction, score,
           workflow, and audit action.
         </p>
-        <button
-          className="button button-light"
-          onClick={onLogout}
-          type="button"
-        >
-          <Icon name="logout" size={15} /> Sign out
-        </button>
+        {canSignOut ? (
+          <button
+            className="button button-light"
+            onClick={onLogout}
+            type="button"
+          >
+            <Icon name="logout" size={15} /> Sign out
+          </button>
+        ) : (
+          <p className="panel-note">
+            This install runs in single-operator mode, so the API accepts local
+            requests without a sign-in and there is no session to end.
+          </p>
+        )}
       </section>
     </div>
   );
