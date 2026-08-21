@@ -1,6 +1,6 @@
 {
   "name": "beyond-fire-radar-desktop",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "Windows desktop shell and installer for Beyond Fire Radar",
   "main": "main.cjs",

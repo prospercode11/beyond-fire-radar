@@ -190,9 +190,7 @@ def _layer_bounds(client: httpx.Client, layer_url: str) -> tuple[int, int]:
     return int(attributes["lo"]), int(attributes["hi"])
 
 
-def _fetch_window(
-    client: httpx.Client, layer_url: str, start: int, end: int
-) -> dict[str, Any]:
+def _fetch_window(client: httpx.Client, layer_url: str, start: int, end: int) -> dict[str, Any]:
     parameters = {
         "where": f"OBJECTID >= {start} AND OBJECTID <= {end}",
         "outFields": "ACCOUNT,FULLADDRESS",
@@ -329,9 +327,7 @@ def _load_buildings(cache: sqlite3.Connection, detailed_zip: Path) -> int:
 
 
 def _mailing_address(row: dict[str, str]) -> str:
-    lines = [
-        _clean(row.get(key)) for key in ("NAME_ADD2", "NAME_ADD3", "NAME_ADD4", "NAME_ADD5")
-    ]
+    lines = [_clean(row.get(key)) for key in ("NAME_ADD2", "NAME_ADD3", "NAME_ADD4", "NAME_ADD5")]
     locality = " ".join(
         part
         for part in (_clean(row.get("CITY")), _clean(row.get("STATE")), _clean(row.get("ZIP")))
@@ -430,7 +426,8 @@ def write_normalized_csv(
                         "sales_count": str(sales_count) if sales_count else "",
                         "last_sale_date": last_date or _iso_date(row.get("SALE_DATE")),
                         "last_sale_price": last_price or _number(row.get("SALE_AMT")),
-                        "last_sale_legal_reference": last_reference or _clean(row.get("LEGALREFER")),
+                        "last_sale_legal_reference": last_reference
+                        or _clean(row.get("LEGALREFER")),
                         "last_sale_deed_type": last_deed or "",
                         "total_value": _number(row.get("JUST")),
                         "land_value": _number(row.get("LNVS_N")),
