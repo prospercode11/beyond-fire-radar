@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     bootstrap_admin_email: str = "admin@example.com"
     bootstrap_admin_password: str = "change-me-in-development"
     enable_bootstrap: bool = True
+    # Single-operator desktop mode: the API accepts requests without a session token
+    # and attributes them to the one local account, so the desktop shell needs no
+    # sign-in screen. Only defensible because that build binds the API to loopback
+    # for one person; validate_production_defaults refuses it outside development.
+    enable_single_operator_mode: bool = False
     web_origin: str = "http://localhost:3000"
     allowed_hosts: str = "*"
     raw_snapshot_dir: str = "data/raw-snapshots"
@@ -79,6 +84,8 @@ class Settings(BaseSettings):
         if self.app_env.lower() in {"production", "staging"}:
             if self.enable_bootstrap:
                 raise ValueError("ENABLE_BOOTSTRAP must be false outside development")
+            if self.enable_single_operator_mode:
+                raise ValueError("ENABLE_SINGLE_OPERATOR_MODE must be false outside development")
             if self.bootstrap_admin_password == "change-me-in-development":
                 raise ValueError("BOOTSTRAP_ADMIN_PASSWORD must be replaced outside development")
             if self.database_url.startswith("sqlite"):

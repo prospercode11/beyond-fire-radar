@@ -5,10 +5,15 @@ import hashlib
 import hmac
 import secrets
 
+MINIMUM_PASSWORD_LENGTH = 8
+
 
 def hash_password(password: str) -> str:
-    if len(password) < 12:
-        raise ValueError("password must be at least 12 characters")
+    # Kept in step with the Credentials schema: the request model rejects a short
+    # password with a 422 before reaching this point, so a mismatch here would only
+    # turn an operator-chosen password into a 500 during bootstrap.
+    if len(password) < MINIMUM_PASSWORD_LENGTH:
+        raise ValueError(f"password must be at least {MINIMUM_PASSWORD_LENGTH} characters")
     salt = secrets.token_bytes(16)
     iterations = 600_000
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)

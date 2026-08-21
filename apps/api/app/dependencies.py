@@ -30,6 +30,20 @@ def get_current_user(
     db: DbSession,
     authorization: Annotated[Optional[str], Header()] = None,
 ) -> User:
+    # Single-operator desktop mode resolves the one local account without a session
+    # token, so every route keeps its role checks and every audit record keeps a real
+    # actor while the shell drops its sign-in screen. Deliberately ignores any token
+    # that was sent, so a stale one cannot lock the operator out of their own install.
+    if get_settings().enable_single_operator_mode:
+        operator = db.scalar(
+            select(User).where(User.is_active.is_(True)).order_by(User.created_at, User.id)
+        )
+        if operator is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="no local operator account exists",
+            )
+        return operator
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required"

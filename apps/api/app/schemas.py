@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.security import MINIMUM_PASSWORD_LENGTH
 
 
 class BootstrapStatus(BaseModel):
@@ -12,8 +14,13 @@ class BootstrapStatus(BaseModel):
 
 
 class Credentials(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=12, max_length=256)
+    # The sign-in identifier is whatever the operator configured for the bootstrap
+    # administrator, and a single-operator desktop install bound to loopback has no
+    # reason to require a routable mailbox, so a bare name such as "admin" is accepted.
+    # The field stays named `email` because the dashboard payload and the stored user
+    # record both key on it.
+    email: str = Field(min_length=1, max_length=320)
+    password: str = Field(min_length=MINIMUM_PASSWORD_LENGTH, max_length=256)
 
 
 class UserResponse(BaseModel):

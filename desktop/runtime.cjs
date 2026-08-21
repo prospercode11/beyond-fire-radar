@@ -31,6 +31,9 @@ function buildBackendEnvironment(paths, webOrigin) {
     WEB_ORIGIN: webOrigin,
     ALLOWED_HOSTS: "127.0.0.1,localhost",
     ENABLE_API_DOCS: "false",
+    // One person on one machine, with the API bound to loopback, so a sign-in screen
+    // guards nothing that the desktop session does not already grant.
+    ENABLE_SINGLE_OPERATOR_MODE: "true",
     ENABLE_LIVE_SARASOTA_DISPATCH_POLLING: "true",
     ENABLE_SARASOTA_POLLING_WORKER: "true",
     SARASOTA_LIVE_AUTHORIZATION_BASIS: "explicit_user_permission",
