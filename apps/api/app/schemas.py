@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.security import MINIMUM_PASSWORD_LENGTH
+
 
 class BootstrapStatus(BaseModel):
     user_count: int
@@ -18,7 +20,7 @@ class Credentials(BaseModel):
     # The field stays named `email` because the dashboard payload and the stored user
     # record both key on it.
     email: str = Field(min_length=1, max_length=320)
-    password: str = Field(min_length=8, max_length=256)
+    password: str = Field(min_length=MINIMUM_PASSWORD_LENGTH, max_length=256)
 
 
 class UserResponse(BaseModel):
